@@ -1,6 +1,6 @@
 #pragma once
 
-#include "game_types.h"
+#include "games_types.h"
 #include "raylib.h"
 #include <vector>
 #include <string>

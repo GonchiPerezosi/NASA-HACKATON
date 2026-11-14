@@ -1,6 +1,6 @@
 #include "raylib.h"
-#include "game_types.h"
-#include "committee.h"
+#include "games_types.h"
+#include "comitee.h"
 #include "lab_shop.h"
 
 int main() {

@@ -1,4 +1,4 @@
-#include "committee.h"
+#include "comitee.h"
 #include <algorithm>
 #include <cmath>
 #include <random>
