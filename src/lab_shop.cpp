@@ -1,10 +1,15 @@
 #include "lab_shop.h"
+#include <cmath>
+#include <algorithm>
 
 void LabShopPhase::Init() {
     activeTab = 0;
     equippedCapsuleIdx = -1;
     equippedTankIdx    = -1;
     equippedEngineIdx  = -1;
+    scanAnimTimer      = 0.0f;
+    estimatedDeltaV    = 0.0f;
+
     shopFeedback = "Compra una Cápsula, un Tanque y un Motor con tu presupuesto.";
     feedbackColor = LIGHTGRAY;
 
@@ -17,7 +22,6 @@ void LabShopPhase::Init() {
     // texEngine  = LoadTexture("assets/motor.png");
     // ========================================================================
 
-    // Catálogo de la Tienda (todas empiezan con purchased = false)
     capsuleItems = {
         { { 1, "Cápsula Mercury-Lite", PartCategory::CAPSULE, 15.0f, 1.5f, 0.0f, 0.0f, "Proyecto Mercury (1961)" }, false },
         { { 2, "Módulo Apolo CSM",     PartCategory::CAPSULE, 35.0f, 5.5f, 0.0f, 0.0f, "Programa Apolo (1969)" },   false },
@@ -45,7 +49,6 @@ void LabShopPhase::Unload() {
 }
 
 void LabShopPhase::OnEnter(SharedMissionData& missionData) {
-    // Si pruebas esta pantalla sin pasar antes por el jurado, asigna $120M de prueba
     if (missionData.awardedBudget <= 0.0f) {
         missionData.awardedBudget = 120.0f;
     }
@@ -55,7 +58,7 @@ void LabShopPhase::OnEnter(SharedMissionData& missionData) {
 
 void LabShopPhase::RecalculateRocketStats(SharedMissionData& missionData) {
     RocketStats& r = missionData.rocket;
-    r = RocketStats{}; // Reiniciar estadísticas antes de sumar las piezas equipadas
+    r = RocketStats{};
 
     if (equippedCapsuleIdx >= 0) r.capsule = capsuleItems[equippedCapsuleIdx].part;
     if (equippedTankIdx >= 0)    r.tank    = tankItems[equippedTankIdx].part;
@@ -69,6 +72,14 @@ void LabShopPhase::RecalculateRocketStats(SharedMissionData& missionData) {
     float totalWetMass  = r.dryMassTons + r.maxFuelTons;
     float weightEarthKN = totalWetMass * 9.81f;
     r.twr = (weightEarthKN > 0.0f) ? (r.thrustKN / weightEarthKN) : 0.0f;
+
+    // Cálculo de Delta-V real (Ecuación de Tsiolkovsky: dV = Isp * g0 * ln(m0 / mf))
+    if (r.dryMassTons > 0.0f && r.maxFuelTons > 0.0f && r.thrustKN > 0.0f) {
+        float isp = 310.0f + (r.thrustKN / 2400.0f) * 140.0f; // Impulso específico estimado (s)
+        estimatedDeltaV = isp * 9.81f * std::log(totalWetMass / r.dryMassTons);
+    } else {
+        estimatedDeltaV = 0.0f;
+    }
 }
 
 void LabShopPhase::HandleShopInteraction(std::vector<ShopItem>& currentList, int& equippedIdx, SharedMissionData& missionData) {
@@ -77,45 +88,41 @@ void LabShopPhase::HandleShopInteraction(std::vector<ShopItem>& currentList, int
 
     for (size_t i = 0; i < currentList.size(); ++i) {
         float cardY = 175.0f + i * 155.0f;
-
-        // Botón principal de la tarjeta (Comprar o Equipar)
         Rectangle mainActionBtn = { 590.0f, cardY + 25.0f, 195.0f, 48.0f };
-        // Botón secundario para devolver/vender pieza comprada
         Rectangle refundBtn     = { 590.0f, cardY + 82.0f, 195.0f, 34.0f };
 
         if (CheckCollisionPointRec(mousePos, mainActionBtn)) {
             if (!currentList[i].purchased) {
-                // Lógica de COMPRA
                 float price = currentList[i].part.costMillions;
                 if (missionData.remainingBudget >= price) {
                     missionData.remainingBudget -= price;
                     currentList[i].purchased = true;
-                    equippedIdx = static_cast<int>(i); // Se equipa automáticamente al comprar
+                    equippedIdx = static_cast<int>(i);
+                    scanAnimTimer = 1.0f; // Activar escáner láser
                     RecalculateRocketStats(missionData);
 
-                    shopFeedback = "Comprado y equipado: " + currentList[i].part.name;
+                    shopFeedback = "Comprado y montado: " + currentList[i].part.name;
                     feedbackColor = GREEN;
                 } else {
-                    shopFeedback = "Presupuesto insuficiente para " + currentList[i].part.name;
+                    shopFeedback = "Saldo insuficiente para " + currentList[i].part.name;
                     feedbackColor = RED;
                 }
             } else {
-                // Lógica de EQUIPAR (si ya estaba comprada)
                 equippedIdx = static_cast<int>(i);
+                scanAnimTimer = 1.0f; // Activar escáner láser
                 RecalculateRocketStats(missionData);
-                shopFeedback = "Pieza montada en el cohete: " + currentList[i].part.name;
+                shopFeedback = "Pieza equipada: " + currentList[i].part.name;
                 feedbackColor = SKYBLUE;
             }
         }
         else if (currentList[i].purchased && CheckCollisionPointRec(mousePos, refundBtn)) {
-            // Lógica de VENTA / REEMBOLSO
             missionData.remainingBudget += currentList[i].part.costMillions;
             currentList[i].purchased = false;
             if (equippedIdx == static_cast<int>(i)) {
                 equippedIdx = -1;
             }
             RecalculateRocketStats(missionData);
-            shopFeedback = "Pieza devuelta. Reembolsados $" + std::to_string((int)currentList[i].part.costMillions) + "M";
+            shopFeedback = "Pieza vendida. Reembolso: +$" + std::to_string(static_cast<int>(currentList[i].part.costMillions)) + "M";
             feedbackColor = ORANGE;
         }
     }
@@ -124,7 +131,12 @@ void LabShopPhase::HandleShopInteraction(std::vector<ShopItem>& currentList, int
 GameState LabShopPhase::Update(SharedMissionData& missionData) {
     Vector2 mousePos = GetMousePosition();
 
-    // 1. Cambio de pestañas de la tienda
+    // Actualizar animación del escáner láser
+    if (scanAnimTimer > 0.0f) {
+        scanAnimTimer = std::max(0.0f, scanAnimTimer - GetFrameTime() * 1.6f);
+    }
+
+    // Cambio de pestañas de la tienda
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         for (int t = 0; t < 3; ++t) {
             Rectangle tabRect = { 35.0f + t * 260.0f, 105.0f, 245.0f, 48.0f };
@@ -134,17 +146,15 @@ GameState LabShopPhase::Update(SharedMissionData& missionData) {
         }
     }
 
-    // 2. Interacción con los artículos de la pestaña activa
     if (activeTab == 0)      HandleShopInteraction(capsuleItems, equippedCapsuleIdx, missionData);
     else if (activeTab == 1) HandleShopInteraction(tankItems,    equippedTankIdx,    missionData);
     else if (activeTab == 2) HandleShopInteraction(engineItems,  equippedEngineIdx,  missionData);
 
-    // 3. Validación para pasar a la Fase 3 (Misión)
     bool allPartsMounted = (equippedCapsuleIdx >= 0) && (equippedTankIdx >= 0) && (equippedEngineIdx >= 0);
     bool validTWR        = missionData.rocket.twr > 1.05f;
     bool canLaunch       = allPartsMounted && validTWR;
 
-    Rectangle launchBtn = { 865.0f, 595.0f, 375.0f, 75.0f };
+    Rectangle launchBtn = { 865.0f, 605.0f, 375.0f, 70.0f };
     bool clickedLaunch  = IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && CheckCollisionPointRec(mousePos, launchBtn);
 
     if (canLaunch && (clickedLaunch || IsKeyPressed(KEY_ENTER))) {
@@ -168,7 +178,7 @@ void LabShopPhase::DrawShopList(const std::vector<ShopItem>& currentList, int eq
         DrawRectangleRec(cardRect, Color{ 25, 31, 46, 240 });
         DrawRectangleLinesEx(cardRect, isEquipped ? 3.0f : 1.5f, borderCol);
 
-        // Miniatura / Hueco de sprite de la pieza en la tienda
+        // Miniatura / Hueco de sprite
         Rectangle iconBox = { 52.0f, cardY + 24.0f, 90.0f, 90.0f };
         DrawRectangleRec(iconBox, Color{ 16, 20, 30, 255 });
         DrawRectangleLinesEx(iconBox, 1.0f, DARKGRAY);
@@ -180,28 +190,25 @@ void LabShopPhase::DrawShopList(const std::vector<ShopItem>& currentList, int eq
 
         if (activeTex != nullptr) {
             DrawTexturePro(*activeTex,
-                           { 0, 0, (float)activeTex->width, (float)activeTex->height },
+                           { 0, 0, static_cast<float>(activeTex->width), static_cast<float>(activeTex->height) },
                            { iconBox.x + 45.0f, iconBox.y + 45.0f, 70.0f, 70.0f },
                            { 35.0f, 35.0f }, 0.0f, WHITE);
         } else {
-            DrawText("IMG", (int)iconBox.x + 28, (int)iconBox.y + 36, 18, GRAY);
+            DrawText("PIEZA", static_cast<int>(iconBox.x + 18), static_cast<int>(iconBox.y + 36), 16, GRAY);
         }
 
-        // Datos técnicos de la pieza
-        DrawText(item.part.name.c_str(), 160, (int)cardY + 16, 22, WHITE);
-        DrawText(item.part.nasaRef.c_str(), 160, (int)cardY + 44, 15, SKYBLUE);
-
-        DrawText(TextFormat("Masa Seca: %.1f t", item.part.dryMassTons), 160, (int)cardY + 75, 17, LIGHTGRAY);
+        DrawText(item.part.name.c_str(), 160, static_cast<int>(cardY + 16), 22, WHITE);
+        DrawText(item.part.nasaRef.c_str(), 160, static_cast<int>(cardY + 44), 15, SKYBLUE);
+        DrawText(TextFormat("Masa Seca: %.1f t", item.part.dryMassTons), 160, static_cast<int>(cardY + 75), 17, LIGHTGRAY);
 
         if (item.part.fuelMassTons > 0.0f) {
-            DrawText(TextFormat("Capacidad Combustible: %.0f t", item.part.fuelMassTons), 160, (int)cardY + 100, 17, ORANGE);
+            DrawText(TextFormat("Combustible: %.0f t", item.part.fuelMassTons), 160, static_cast<int>(cardY + 100), 17, ORANGE);
         } else if (item.part.thrustKN > 0.0f) {
-            DrawText(TextFormat("Empuje Motor: %.0f kN", item.part.thrustKN), 160, (int)cardY + 100, 17, ORANGE);
+            DrawText(TextFormat("Empuje Motor: %.0f kN", item.part.thrustKN), 160, static_cast<int>(cardY + 100), 17, ORANGE);
         } else {
-            DrawText("Soporte vital y telemetría lunar", 160, (int)cardY + 100, 17, LIGHTGRAY);
+            DrawText("Soporte vital y telemetría lunar", 160, static_cast<int>(cardY + 100), 17, LIGHTGRAY);
         }
 
-        // Botones de acción a la derecha de la tarjeta
         Rectangle mainBtn   = { 590.0f, cardY + 25.0f, 195.0f, 48.0f };
         Rectangle refundBtn = { 590.0f, cardY + 82.0f, 195.0f, 34.0f };
         bool hoverMain      = CheckCollisionPointRec(mousePos, mainBtn);
@@ -212,20 +219,19 @@ void LabShopPhase::DrawShopList(const std::vector<ShopItem>& currentList, int eq
             DrawRectangleRec(mainBtn, btnCol);
             DrawRectangleLinesEx(mainBtn, 1.5f, WHITE);
             DrawText(TextFormat("COMPRAR $%.0fM", item.part.costMillions),
-                     (int)mainBtn.x + 22, (int)mainBtn.y + 14, 19, canAfford ? BLACK : LIGHTGRAY);
+                     static_cast<int>(mainBtn.x + 22), static_cast<int>(mainBtn.y + 14), 19, canAfford ? BLACK : LIGHTGRAY);
         } else {
             Color eqCol = isEquipped ? GOLD : (hoverMain ? BLUE : SKYBLUE);
             DrawRectangleRec(mainBtn, eqCol);
             DrawRectangleLinesEx(mainBtn, 1.5f, WHITE);
             DrawText(isEquipped ? "MONTADO" : "MONTAR",
-                     (int)mainBtn.x + 52, (int)mainBtn.y + 14, 19, BLACK);
+                     static_cast<int>(mainBtn.x + 52), static_cast<int>(mainBtn.y + 14), 19, BLACK);
 
-            // Botón devolver
             bool hoverRef = CheckCollisionPointRec(mousePos, refundBtn);
             DrawRectangleRec(refundBtn, hoverRef ? MAROON : Color{ 60, 30, 30, 255 });
             DrawRectangleLinesEx(refundBtn, 1.0f, GRAY);
             DrawText(TextFormat("Vender (+$%.0fM)", item.part.costMillions),
-                     (int)refundBtn.x + 32, (int)refundBtn.y + 8, 16, WHITE);
+                     static_cast<int>(refundBtn.x + 32), static_cast<int>(refundBtn.y + 8), 16, WHITE);
         }
     }
 }
@@ -233,12 +239,12 @@ void LabShopPhase::DrawShopList(const std::vector<ShopItem>& currentList, int eq
 void LabShopPhase::Draw(const SharedMissionData& missionData) const {
     if (texLabBg.id > 0) {
         DrawTexturePro(texLabBg,
-                       { 0, 0, (float)texLabBg.width, (float)texLabBg.height },
-                       { 0, 0, (float)SCREEN_WIDTH, (float)SCREEN_HEIGHT },
+                       { 0, 0, static_cast<float>(texLabBg.width), static_cast<float>(texLabBg.height) },
+                       { 0, 0, static_cast<float>(SCREEN_WIDTH), static_cast<float>(SCREEN_HEIGHT) },
                        { 0, 0 }, 0.0f, WHITE);
     }
 
-    // Cabecera superior con Presupuesto
+    // Cabecera
     DrawRectangle(0, 0, SCREEN_WIDTH, 75, Color{ 12, 16, 26, 245 });
     DrawText("FASE 2: TIENDA DE SUMINISTROS Y LABORATORIO", 35, 23, 25, RAYWHITE);
 
@@ -247,104 +253,118 @@ void LabShopPhase::Draw(const SharedMissionData& missionData) const {
     DrawText(TextFormat("FONDOS DISPONIBLES: $%.1fM", missionData.remainingBudget),
              SCREEN_WIDTH - 392, 26, 22, GREEN);
 
-    // =========================================================
-    // ZONA IZQUIERDA: TIENDA DE PIEZAS
-    // =========================================================
+    // Pestañas izquierda
     const char* tabNames[3] = { "1. CÁPSULAS", "2. TANQUES", "3. MOTORES" };
     for (int t = 0; t < 3; ++t) {
         Rectangle tabRect = { 35.0f + t * 260.0f, 105.0f, 245.0f, 48.0f };
         bool isActive = (activeTab == t);
         DrawRectangleRec(tabRect, isActive ? Color{ 45, 75, 115, 255 } : Color{ 24, 29, 42, 255 });
         DrawRectangleLinesEx(tabRect, isActive ? 2.5f : 1.0f, isActive ? GOLD : GRAY);
-        DrawText(tabNames[t], (int)tabRect.x + 48, (int)tabRect.y + 14, 20, isActive ? GOLD : WHITE);
+        DrawText(tabNames[t], static_cast<int>(tabRect.x + 48), static_cast<int>(tabRect.y + 14), 20, isActive ? GOLD : WHITE);
     }
 
     if (activeTab == 0)      DrawShopList(capsuleItems, equippedCapsuleIdx, missionData.remainingBudget);
     else if (activeTab == 1) DrawShopList(tankItems,    equippedTankIdx,    missionData.remainingBudget);
     else if (activeTab == 2) DrawShopList(engineItems,  equippedEngineIdx,  missionData.remainingBudget);
 
-    // Barra inferior de notificaciones de la tienda
     DrawRectangle(35, 645, 775, 42, Color{ 18, 22, 33, 240 });
     DrawRectangleLines(35, 645, 775, 42, DARKGRAY);
     DrawText(shopFeedback.c_str(), 50, 656, 18, feedbackColor);
 
     // =========================================================
-    // ZONA DERECHA: LABORATORIO DE MONTAJE DEL COHETE
+    // ZONA DERECHA: LABORATORIO DE MONTAJE + ESCÁNER
     // =========================================================
     DrawRectangle(845, 95, 405, 592, Color{ 20, 25, 38, 245 });
     DrawRectangleLinesEx({ 845, 95, 405, 592 }, 2, SKYBLUE);
-    DrawText("ZONA DE MONTAJE", 955, 110, 20, SKYBLUE);
+    DrawText("ZONA DE MONTAJE", 955, 108, 20, SKYBLUE);
+
+    // Fondo estilo plano técnico (Blueprint) detrás del cohete
+    DrawRectangle(925, 138, 245, 250, Color{ 14, 28, 48, 255 });
+    for (int gx = 945; gx < 1170; gx += 25) DrawLine(gx, 138, gx, 388, Fade(SKYBLUE, 0.15f));
+    for (int gy = 158; gy < 388; gy += 25) DrawLine(925, gy, 1170, gy, Fade(SKYBLUE, 0.15f));
 
     float centerX = 1047.0f;
 
-    // Ranura 1: Cápsula
+    // 1. Cápsula
     if (equippedCapsuleIdx >= 0) {
         if (texCapsule.id > 0) {
-            DrawTexturePro(texCapsule, { 0, 0, (float)texCapsule.width, (float)texCapsule.height },
-                           { centerX, 180.0f, 70.0f, 65.0f }, { 35.0f, 32.5f }, 0.0f, WHITE);
+            DrawTexturePro(texCapsule, { 0, 0, static_cast<float>(texCapsule.width), static_cast<float>(texCapsule.height) },
+                           { centerX, 178.0f, 70.0f, 65.0f }, { 35.0f, 32.5f }, 0.0f, WHITE);
         } else {
-            DrawTriangle({ centerX, 148.0f }, { centerX - 35.0f, 212.0f }, { centerX + 35.0f, 212.0f }, WHITE);
+            DrawTriangle({ centerX, 146.0f }, { centerX - 35.0f, 210.0f }, { centerX + 35.0f, 210.0f }, WHITE);
         }
     } else {
-        DrawRectangleLines((int)centerX - 35, 152, 70, 60, DARKGRAY);
-        DrawText("SIN CÁPSULA", (int)centerX - 42, 175, 12, GRAY);
+        DrawRectangleLines(static_cast<int>(centerX - 35), 150, 70, 60, GRAY);
+        DrawText("SIN CÁPSULA", static_cast<int>(centerX - 42), 173, 12, LIGHTGRAY);
     }
 
-    // Ranura 2: Tanque
+    // 2. Tanque
     if (equippedTankIdx >= 0) {
         if (texTank.id > 0) {
-            DrawTexturePro(texTank, { 0, 0, (float)texTank.width, (float)texTank.height },
-                           { centerX, 278.0f, 70.0f, 125.0f }, { 35.0f, 62.5f }, 0.0f, WHITE);
+            DrawTexturePro(texTank, { 0, 0, static_cast<float>(texTank.width), static_cast<float>(texTank.height) },
+                           { centerX, 275.0f, 70.0f, 120.0f }, { 35.0f, 60.0f }, 0.0f, WHITE);
         } else {
-            DrawRectangle((int)centerX - 35, 215, 70, 125, LIGHTGRAY);
-            DrawText("NASA", (int)centerX - 22, 268, 16, BLUE);
+            DrawRectangle(static_cast<int>(centerX - 35), 213, 70, 120, LIGHTGRAY);
+            DrawText("NASA", static_cast<int>(centerX - 22), 265, 16, BLUE);
         }
     } else {
-        DrawRectangleLines((int)centerX - 35, 215, 70, 125, DARKGRAY);
-        DrawText("SIN TANQUE", (int)centerX - 38, 270, 12, GRAY);
+        DrawRectangleLines(static_cast<int>(centerX - 35), 213, 70, 120, GRAY);
+        DrawText("SIN TANQUE", static_cast<int>(centerX - 38), 268, 12, LIGHTGRAY);
     }
 
-    // Ranura 3: Motor
+    // 3. Motor
     if (equippedEngineIdx >= 0) {
         if (texEngine.id > 0) {
-            DrawTexturePro(texEngine, { 0, 0, (float)texEngine.width, (float)texEngine.height },
-                           { centerX, 365.0f, 56.0f, 45.0f }, { 28.0f, 22.5f }, 0.0f, WHITE);
+            DrawTexturePro(texEngine, { 0, 0, static_cast<float>(texEngine.width), static_cast<float>(texEngine.height) },
+                           { centerX, 358.0f, 56.0f, 45.0f }, { 28.0f, 22.5f }, 0.0f, WHITE);
         } else {
-            DrawTriangle({ centerX, 340.0f }, { centerX - 28.0f, 385.0f }, { centerX + 28.0f, 385.0f }, ORANGE);
+            DrawTriangle({ centerX, 333.0f }, { centerX - 28.0f, 378.0f }, { centerX + 28.0f, 378.0f }, ORANGE);
         }
     } else {
-        DrawRectangleLines((int)centerX - 28, 343, 56, 42, DARKGRAY);
-        DrawText("SIN MOTOR", (int)centerX - 34, 358, 12, GRAY);
+        DrawRectangleLines(static_cast<int>(centerX - 28), 336, 56, 42, GRAY);
+        DrawText("SIN MOTOR", static_cast<int>(centerX - 34), 351, 12, LIGHTGRAY);
     }
 
-    // Resumen técnico de la nave ensamblada
+    // Efecto visual de Escáner Láser al montar pieza
+    if (scanAnimTimer > 0.0f) {
+        float laserY = 140.0f + (1.0f - scanAnimTimer) * 245.0f;
+        DrawRectangle(925, static_cast<int>(laserY - 6), 245, 12, Fade(SKYBLUE, 0.35f));
+        DrawLineEx({ 925.0f, laserY }, { 1170.0f, laserY }, 3.0f, WHITE);
+    }
+
+    // Telemetría y Barra de Delta-V (Alcance Lunar)
     const RocketStats& rk = missionData.rocket;
     float wetMass = rk.dryMassTons + rk.maxFuelTons;
 
-    DrawLine(865, 405, 1230, 405, DARKGRAY);
-    DrawText(TextFormat("Masa Total:        %.1f t", wetMass), 870, 420, 18, WHITE);
-    DrawText(TextFormat("Combustible:       %.1f t", rk.maxFuelTons), 870, 448, 18, ORANGE);
-    DrawText(TextFormat("Empuje Total:     %.0f kN", rk.thrustKN), 870, 476, 18, SKYBLUE);
+    DrawText(TextFormat("Masa Total: %.1f t  |  Empuje: %.0f kN", wetMass, rk.thrustKN), 868, 402, 16, WHITE);
+
+    bool validTWR = rk.twr > 1.05f;
+    DrawText(TextFormat("Empuje/Peso (TWR): %.2f", rk.twr), 868, 428, 18, validTWR ? GREEN : RED);
+
+    // Barra de Delta-V (Meta lunar recomendada: ~5000 m/s)
+    DrawText(TextFormat("Capacidad Delta-V: %.0f m/s", estimatedDeltaV), 868, 458, 17, SKYBLUE);
+    DrawRectangle(868, 482, 360, 18, DARKGRAY);
+    float dvRatio = std::clamp(estimatedDeltaV / 6500.0f, 0.0f, 1.0f);
+    Color dvColor = (estimatedDeltaV >= 4500.0f) ? GREEN : ((estimatedDeltaV >= 2800.0f) ? YELLOW : ORANGE);
+    DrawRectangle(868, 482, static_cast<int>(360.0f * dvRatio), 18, dvColor);
+    DrawRectangleLines(868, 482, 360, 18, WHITE);
+    DrawText(estimatedDeltaV >= 4500.0f ? "Alcance: ÓRBITA LUNAR" : "Alcance: SUBORBITAL / BAJO", 868, 506, 15, dvColor);
 
     bool allPartsMounted = (equippedCapsuleIdx >= 0) && (equippedTankIdx >= 0) && (equippedEngineIdx >= 0);
-    bool validTWR        = rk.twr > 1.05f;
-
-    DrawText(TextFormat("Empuje/Peso (TWR): %.2f", rk.twr), 870, 506, 19, validTWR ? GREEN : RED);
 
     if (!allPartsMounted) {
-        DrawText("Faltan piezas por comprar/montar.", 870, 548, 17, YELLOW);
+        DrawText("Faltan piezas por comprar/montar.", 868, 555, 17, YELLOW);
     } else if (!validTWR) {
-        DrawText("TWR insuficiente (necesitas > 1.05).", 870, 548, 17, RED);
+        DrawText("TWR <= 1.05: Demasiado peso para ese motor.", 868, 555, 16, RED);
     } else {
-        DrawText("COHETE LISTO PARA LANZAMIENTO.", 870, 548, 17, GREEN);
+        DrawText("SISTEMAS VERIFICADOS. LISTO.", 868, 555, 17, GREEN);
     }
 
-    // Botón Lanzar Misión
     bool canLaunch = allPartsMounted && validTWR;
-    Rectangle launchBtn = { 865.0f, 595.0f, 375.0f, 75.0f };
+    Rectangle launchBtn = { 865.0f, 605.0f, 375.0f, 70.0f };
     bool hoverLaunch = CheckCollisionPointRec(GetMousePosition(), launchBtn);
 
     DrawRectangleRec(launchBtn, canLaunch ? (hoverLaunch ? DARKGREEN : GREEN) : DARKGRAY);
     DrawRectangleLinesEx(launchBtn, 2, WHITE);
-    DrawText("IR A PLATAFORMA", (int)launchBtn.x + 68, (int)launchBtn.y + 25, 23, canLaunch ? BLACK : GRAY);
+    DrawText("IR A PLATAFORMA", static_cast<int>(launchBtn.x + 68), static_cast<int>(launchBtn.y + 23), 23, canLaunch ? BLACK : GRAY);
 }
