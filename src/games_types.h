@@ -9,14 +9,16 @@ constexpr int SCREEN_HEIGHT = 720;
 
 enum class GameState {
     COMMITTEE,  // Fase 1: Audiencia de presupuesto con los jueces
-    HANGAR,     // Fase 2: Tienda y laboratorio de ensamblaje
+    HANGAR,     // Fase 2: Tienda de 30 piezas y laboratorio de ensamblaje
     FLIGHT      // Fase 3: Misión de lanzamiento hacia la Luna
 };
 
 enum class PartCategory {
     CAPSULE,
+    LANDER,
     TANK,
-    ENGINE
+    ENGINE,
+    BOOSTER
 };
 
 struct RocketPart {
@@ -32,8 +34,10 @@ struct RocketPart {
 
 struct RocketStats {
     RocketPart capsule;
+    RocketPart lander;
     RocketPart tank;
     RocketPart engine;
+    RocketPart booster;
 
     float totalCost = 0.0f;
     float dryMassTons = 0.0f;
@@ -43,7 +47,7 @@ struct RocketStats {
 };
 
 struct SharedMissionData {
-    float awardedBudget = 0.0f;    // Presupuesto aprobado en millones (ej. 5500.0f = $5.5B)
+    float awardedBudget = 0.0f;
     float remainingBudget = 0.0f;
     RocketStats rocket;
     bool missionSuccess = false;

@@ -8,6 +8,8 @@
 struct ShopItem {
     RocketPart part;
     bool purchased = false;
+    Texture2D texture = { 0 };
+    Color tint = WHITE;
 };
 
 class LabShopPhase {
@@ -20,29 +22,29 @@ public:
 
 private:
     std::vector<ShopItem> capsuleItems;
+    std::vector<ShopItem> landerItems;
     std::vector<ShopItem> tankItems;
     std::vector<ShopItem> engineItems;
+    std::vector<ShopItem> boosterItems;
 
     int activeTab = 0;
+    float scrollOffset = 0.0f;
 
     int equippedCapsuleIdx = -1;
+    int equippedLanderIdx  = -1;
     int equippedTankIdx    = -1;
     int equippedEngineIdx  = -1;
+    int equippedBoosterIdx = 0;
 
-    // Variables para las mejoras visuales y físicas
-    float scanAnimTimer   = 0.0f; // Temporizador del láser de escaneo al montar pieza
-    float estimatedDeltaV = 0.0f; // Delta-V calculado con la ecuación de Tsiolkovsky
+    float scanAnimTimer   = 0.0f;
+    float estimatedDeltaV = 0.0f;
 
-    std::string shopFeedback = "Compra una Cápsula, un Tanque y un Motor con tu presupuesto.";
+    std::string shopFeedback = "Usa la rueda del raton para explorar las 30 piezas disponibles.";
     Color feedbackColor = LIGHTGRAY;
 
-    // --- HUECOS PARA TUS SPRITES ---
-    Texture2D texLabBg    = { 0 };
-    Texture2D texCapsule  = { 0 };
-    Texture2D texTank     = { 0 };
-    Texture2D texEngine   = { 0 };
+    Texture2D texLabBg = { 0 };
 
-    void HandleShopInteraction(std::vector<ShopItem>& currentList, int& equippedIdx, SharedMissionData& missionData);
+    void HandleShopInteraction(std::vector<ShopItem>& currentList, int& equippedIdx, bool isOptional, SharedMissionData& missionData);
     void DrawShopList(const std::vector<ShopItem>& currentList, int equippedIdx, float budget) const;
     void RecalculateRocketStats(SharedMissionData& missionData);
 };

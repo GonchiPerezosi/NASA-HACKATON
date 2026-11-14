@@ -4,7 +4,6 @@
 #include <random>
 #include <cctype>
 
-// Helper para ajustar texto largo dentro de cajas de diálogo en Raylib
 static void DrawWrappedText(const std::string& text, float x, float y, float maxWidth, int fontSize, Color color) {
     std::string line;
     std::string word;
@@ -48,70 +47,87 @@ void CommitteePhase::Init() {
     yesVotesCount = 0;
     userTypedText.clear();
 
-    // Carga de sprites del ZIP si no están cargados aún[cite: 1]
-    if (texBg.id == 0)   texBg   = LoadTexture("sprites/bg.png");
-    if (texDesk.id == 0) texDesk = LoadTexture("sprites/desk.png");
-    if (texHero.id == 0) texHero = LoadTexture("sprites/hero.png");
+    // Carga de sprites desde assets/sprites/
+    if (texBg.id == 0)   texBg   = LoadTexture("assets/sprites/bg.png");
+    if (texDesk.id == 0) texDesk = LoadTexture("assets/sprites/desk.png");
+    if (texHero.id == 0) texHero = LoadTexture("assets/sprites/hero.png");
 
-    // Datos exactos de los 3 jueces de index.html[cite: 2]
+    // JUEZ 1: SR. HALE (Tesorero - centrado en costes y contratos fijos)
     BoardJudge hale;
     hale.id = "hale";
-    hale.name = "MR. HALE";
-    hale.role = "Treasurer";
+    hale.name = "SR. HALE";
+    hale.role = "Tesorero";
     hale.posX = 695.0f;
     hale.maxContributionMillions = 2000;
-    hale.question = "Give me one number: what does this cost, and what stops it from doubling?";
+    hale.question = "Dame una cifra exacta: cuanto cuesta esto y que evita que el precio se duplique?";
     hale.options = {
-        "$5.5 billion. The lander company agreed to a fixed price, so if it costs more, they pay. And $0.4B is saved for surprises that only you can unlock.",
-        "$5.5 billion. We will pay the builders whatever the work ends up costing, so they can fix problems fast, and I will send you a report every month.",
-        "$3 billion, rocket included. We will reuse old Apollo designs, and other countries have promised to pay anything above that amount."
+        "5.500 millones. El aterrizador va a precio fijo (si cuesta mas, lo paga la empresa) y guardamos 400M de reserva.",
+        "5.500 millones. Pagaremos a los fabricantes lo que cueste la obra para ir rapido y te enviare un informe mensual.",
+        "3.000 millones con cohete incluido. Reutilizaremos piezas viejas de Apolo y otros paises pagaran el resto."
     };
-    hale.keywords = { "cost", "budget", "cheap", "efficien", "reus", "return", "invest", "saving", "partner", "commercial", "contract", "dollar", "$", "million", "billion", "fixed" };
-    hale.sprite = LoadTexture("sprites/grey.png");
+    hale.keywords = { "cost", "presupuesto", "barat", "eficien", "reutil", "retorno", "invers", "ahorr", "contrato", "fijo", "dolar", "$", "millon", "billon", "reserva" };
+    hale.reactPositive = "Aja. Por fin cifras realistas y control del gasto. Con eso si puedo trabajar.";
+    hale.reactNeutral  = "Esos numeros son demasiado vagos para soltar miles de millones. Concreta mas.";
+    hale.reactNegative = "Eso es un eslogan, no un presupuesto. Me estas perdiendo.";
+    hale.reactPickGood = "Un contrato a precio fijo con reserva controlada. Eso protege nuestras cuentas.";
+    hale.reactPickBad  = "Dejar costes abiertos o prometer cifras irreales siempre acaba duplicando la factura.";
+    hale.sprite = LoadTexture("assets/sprites/grey.png");
     hale.fallbackColor = LIGHTGRAY;
 
+    // JUEZ 2: PRESIDENTE BROOKS (Presidente - centrado en beneficio publico, ciencia y empleo)
     BoardJudge brooks;
     brooks.id = "brooks";
-    brooks.name = "CHAIRMAN BROOKS";
-    brooks.role = "Chairman";
+    brooks.name = "PRESIDENTE BROOKS";
+    brooks.role = "Presidente";
     brooks.posX = 900.0f;
     brooks.maxContributionMillions = 2500;
-    brooks.question = "What do people on Earth get out of this mission?";
+    brooks.question = "Que ganan los ciudadanos en la Tierra con esta mision lunar?";
     brooks.options = {
-        "New ways to recycle water and make energy that can help dry places on Earth, thousands of good jobs, and free data for every school.",
-        "A historic first landing at the Moon's south pole, watched live by millions, and a big boost to our country's image around the world.",
-        "Detailed maps of the ice on the Moon that our scientists will publish, which will help plan the next missions to the Moon."
+        "Nuevos sistemas de reciclaje de agua y energia para zonas secas, miles de empleos y datos abiertos para escuelas.",
+        "Un aterrizaje historico en el polo sur lunar visto por millones y un gran impulso a nuestra imagen internacional.",
+        "Mapas detallados del hielo lunar que nuestros cientificos publicaran para planificar las siguientes misiones."
     };
-    brooks.keywords = { "science", "discover", "inspir", "job", "student", "educat", "public", "future", "humanity", "technolog", "water", "ice", "mars", "research", "leader", "generation" };
-    brooks.sprite = LoadTexture("sprites/blue.png");
+    brooks.keywords = { "ciencia", "descubr", "inspir", "empleo", "trabajo", "estudiant", "educa", "public", "futuro", "humanidad", "tecnolog", "agua", "hielo", "investig", "tierra" };
+    brooks.reactPositive = "Me gusta como suena. Eso si podemos explicarselo con orgullo a los contribuyentes.";
+    brooks.reactNeutral  = "La gente necesita ver un beneficio claro aqui en la Tierra, no solo banderas.";
+    brooks.reactNegative = "Con ese discurso el Congreso nos recortara los fondos manana mismo.";
+    brooks.reactPickGood = "Tecnologia util para la Tierra, empleo y ciencia abierta. Gran argumento.";
+    brooks.reactPickBad  = "El prestigio por si solo no basta para justificar esta inversion ante el pais.";
+    brooks.sprite = LoadTexture("assets/sprites/blue.png");
     brooks.fallbackColor = SKYBLUE;
 
+    // JUEZ 3: DRA. VANCE (Ingeniera Jefe - centrada en seguridad, margenes y respaldo)
     BoardJudge vance;
     vance.id = "vance";
-    vance.name = "DR. VANCE";
-    vance.role = "Chief Engineer";
+    vance.name = "DRA. VANCE";
+    vance.role = "Ingeniera Jefe";
     vance.posX = 1090.0f;
     vance.maxContributionMillions = 2000;
-    vance.question = "Something will fail on the way to the Moon. What is your backup plan?";
+    vance.question = "Algo fallara camino a la Luna. Cual es vuestro plan de respaldo?";
     vance.options = {
-        "Every important system has a spare, we carry 20% extra food, water and air, and if the lander fails the crew flies home in the capsule.",
-        "We use the newest technology there is and test every part twice before launch, so a big failure on the way is very unlikely.",
-        "Mission control watches the ship 24 hours a day, and the crew trains for months so they can fix anything with spare parts."
+        "Cada sistema vital tiene repuesto, llevamos 20% extra de agua y aire, y si falla el modulo vuelven en la capsula.",
+        "Usamos la tecnologia mas moderna y probamos cada pieza dos veces antes del despegue para evitar fallos.",
+        "Control de mision vigila la nave 24 horas y la tripulacion entrena meses para reparar cualquier averia."
     };
-    vance.keywords = { "safe", "risk", "test", "backup", "redundan", "margin", "crew", "abort", "schedule", "reliab", "radiation", "supplies", "oxygen", "fuel", "contingen", "spare" };
-    vance.sprite = LoadTexture("sprites/slick.png");
+    vance.keywords = { "segur", "riesgo", "prueba", "respaldo", "redundan", "margen", "tripulacion", "abort", "fiab", "radiacion", "oxigeno", "combustible", "repuesto", "aire" };
+    vance.reactPositive = "Bien pensado. Veo margenes de seguridad realistas y redundancia tecnica.";
+    vance.reactNeutral  = "En el espacio todo lo que puede fallar, falla. Necesito mas margen de seguridad.";
+    vance.reactNegative = "No pienso firmar el lanzamiento de una tripulacion con ese nivel de riesgo.";
+    vance.reactPickGood = "Redundancia, margen del 20% y plan de aborto claro. Ingenieria solida.";
+    vance.reactPickBad  = "Confiar en que nada fallara no es un plan de ingenieria aceptable.";
+    vance.sprite = LoadTexture("assets/sprites/slick.png");
     vance.fallbackColor = ORANGE;
 
     judges = { hale, brooks, vance };
 
-    // Pitches iniciales de index.html (el índice 0 es el óptimo)[cite: 2]
+    // Propuestas iniciales (el indice 0 es la mas solida)
     pitchOptions = {
-        "Four astronauts spend a week at the Moon's south pole looking for ice. We need $5.5 billion: $4.1B for the rocket and capsule, $1B for the lander, $0.4B saved for surprises.",
-        "Four astronauts spend a week at the Moon's south pole looking for ice. We only need $900 million, because we will reuse old parts and share the costs with other countries.",
-        "Four astronauts spend a week at the Moon's south pole, build a small base and test a Mars rover. We need $5.5 billion and will pay builders whatever the work ends up costing."
+        "4 astronautas exploraran el polo sur lunar buscando hielo. Pedimos 5.500M$: 4.100M$ cohete y capsula, 1.000M$ modulo lunar y 400M$ de reserva.",
+        "4 astronautas iran al polo sur lunar buscando hielo. Solo necesitamos 900M$ porque reutilizaremos piezas viejas y compartiremos gastos.",
+        "4 astronautas iran al polo sur lunar, montaran una base y probaran un rover de Marte por 5.500M$, pagando lo que cueste la obra."
     };
 
-    StartDialogue(-1, "PHASE 1 - THE BUDGET HEARING\nYou are the mission economist. Convince the board to pay for a crewed mission to the Moon.\nTip: Click NASA DATA (top-left) for real Artemis cost figures you can use.");
+    StartDialogue(-1, "FASE 1 - AUDIENCIA DE PRESUPUESTO\nEres el economista de la mision. Convence al comite para financiar el viaje tripulado a la Luna.\nConsejo: Pulsa DATOS NASA (arriba a la izquierda) para consultar costes reales de auditoria.");
 }
 
 void CommitteePhase::Unload() {
@@ -153,14 +169,14 @@ int CommitteePhase::ScoreFreeText(const BoardJudge& j, const std::string& text) 
         if (lower.find(k) != std::string::npos) hits++;
     }
     bool hasDigit = std::any_of(lower.begin(), lower.end(), ::isdigit);
-    int delta = -10 + std::min(hits, 5) * 6 + (text.size() > 160 ? 4 : (text.size() < 50 ? -6 : 0)) + (hasDigit ? 4 : 0);
+    int delta = -10 + std::min(hits, 5) * 6 + (text.size() > 140 ? 4 : (text.size() < 45 ? -6 : 0)) + (hasDigit ? 4 : 0);
     return std::clamp(delta, -18, 20);
 }
 
-std::string CommitteePhase::GetReactionLine(int delta) const {
-    if (delta > 6)  return "Hm. That is more concrete than I expected. I can work with that.";
-    if (delta < -3) return "That is not an argument, that is a slogan. I expected real numbers.";
-    return "I have heard that before. I need more specifics than that.";
+std::string CommitteePhase::GetJudgeReaction(const BoardJudge& j, int delta) const {
+    if (delta > 6)  return j.reactPositive;
+    if (delta < -3) return j.reactNegative;
+    return j.reactNeutral;
 }
 
 void CommitteePhase::EvaluatePitch(const std::string& text, bool pickedBest, bool usedPickMode) {
@@ -170,7 +186,7 @@ void CommitteePhase::EvaluatePitch(const std::string& text, bool pickedBest, boo
             d = pickedBest ? std::max(d, 12) : std::min(d, 4);
         }
         pendingDeltas[i] = d;
-        pendingReactions[i] = GetReactionLine(d);
+        pendingReactions[i] = GetJudgeReaction(judges[i], d);
     }
 }
 
@@ -181,11 +197,11 @@ void CommitteePhase::EvaluateJudgeAnswer(int judgeIdx, const std::string& text, 
     }
     pendingDeltas[judgeIdx] = d;
     if (usedPickMode && pickedBest) {
-        pendingReactions[judgeIdx] = "Solid numbers and clear mechanism. That directly answers my concern.";
+        pendingReactions[judgeIdx] = judges[judgeIdx].reactPickGood;
     } else if (usedPickMode) {
-        pendingReactions[judgeIdx] = "You are glossing over the risk there. That leaves a serious gap in your plan.";
+        pendingReactions[judgeIdx] = judges[judgeIdx].reactPickBad;
     } else {
-        pendingReactions[judgeIdx] = GetReactionLine(d);
+        pendingReactions[judgeIdx] = GetJudgeReaction(judges[judgeIdx], d);
     }
 }
 
@@ -195,7 +211,6 @@ void CommitteePhase::ComputeVerdict(SharedMissionData& missionData) {
 
     for (auto& j : judges) {
         if (j.mood >= 40) {
-            // Fórmula exacta de index.html: Math.round(j.max * m / 100 / 50) * 50[cite: 2]
             float raw = (static_cast<float>(j.maxContributionMillions) * j.mood) / 100.0f;
             int pledge = static_cast<int>(std::round(raw / 50.0f)) * 50;
             j.pledgedMillions = pledge;
@@ -216,7 +231,7 @@ void CommitteePhase::AdvanceStage(SharedMissionData& missionData) {
     switch (stage) {
         case Stage::INTRO:
             stage = Stage::MODE_SELECT;
-            StartDialogue(-1, "How do you want to answer the board?\nPICK FROM 3: Choose one of three prepared arguments.\nWRITE MY OWN: Type your own budget pitch and answers.");
+            StartDialogue(-1, "Como quieres responder al comite?\n[1] ELEGIR ENTRE 3: Selecciona una de las tres respuestas preparadas.\n[2] ESCRIBIR YO MISMO: Redacta tus propios argumentos y cifras.");
             break;
 
         case Stage::PITCH_INTRO:
@@ -224,9 +239,9 @@ void CommitteePhase::AdvanceStage(SharedMissionData& missionData) {
             userTypedText.clear();
             if (!writeMode) {
                 PrepareShuffledChoices(pitchOptions);
-                StartDialogue(-2, "Choose your opening pitch to the NASA Board:");
+                StartDialogue(-2, "Elige tu propuesta inicial para el Comite de la NASA:");
             } else {
-                StartDialogue(-2, "Type your opening pitch (include goal, cost in billions, and safety plan):");
+                StartDialogue(-2, "Escribe tu propuesta inicial (objetivo, coste en millones y seguridad):");
             }
             break;
 
@@ -237,7 +252,7 @@ void CommitteePhase::AdvanceStage(SharedMissionData& missionData) {
                 reactStepIdx++;
             } else {
                 stage = Stage::ROUND_INTRO;
-                StartDialogue(-1, "Question round. Each board member asks you one question. Your answer moves their approval bar up or down.");
+                StartDialogue(-1, "Ronda de preguntas. Cada miembro del comite te hara una pregunta clave para decidir su voto.");
             }
             break;
 
@@ -252,9 +267,9 @@ void CommitteePhase::AdvanceStage(SharedMissionData& missionData) {
             userTypedText.clear();
             if (!writeMode) {
                 PrepareShuffledChoices(judges[currentJudgeIdx].options);
-                StartDialogue(-2, "Choose your answer to " + judges[currentJudgeIdx].name + ":");
+                StartDialogue(-2, "Elige tu respuesta para " + judges[currentJudgeIdx].name + ":");
             } else {
-                StartDialogue(-2, "Type your answer to " + judges[currentJudgeIdx].name + ":");
+                StartDialogue(-2, "Escribe tu respuesta para " + judges[currentJudgeIdx].name + ":");
             }
             break;
 
@@ -265,7 +280,7 @@ void CommitteePhase::AdvanceStage(SharedMissionData& missionData) {
                 StartDialogue(currentJudgeIdx, judges[currentJudgeIdx].question);
             } else {
                 stage = Stage::VERDICT_INTRO;
-                StartDialogue(-1, "The board votes now. A member with approval below 40 gives nothing. You need at least two YES votes.");
+                StartDialogue(-1, "El comite procede a votar. Quien tenga menos de 40 de aprobacion no aporta fondos. Necesitas al menos 2 votos a favor.");
             }
             break;
 
@@ -280,17 +295,17 @@ void CommitteePhase::AdvanceStage(SharedMissionData& missionData) {
             if (reactStepIdx < 3) {
                 const auto& j = judges[reactStepIdx];
                 if (j.pledgedMillions > 0) {
-                    StartDialogue(reactStepIdx, TextFormat("Approval %d/100. I vote YES and pledge $%.2f billion.", j.mood, j.pledgedMillions / 1000.0f));
+                    StartDialogue(reactStepIdx, TextFormat("Aprobacion %d/100. Voto SI y aporto $%d millones ($%.2f B).", j.mood, j.pledgedMillions, j.pledgedMillions / 1000.0f));
                 } else {
-                    StartDialogue(reactStepIdx, TextFormat("Approval %d/100. You have not convinced me. I vote NO.", j.mood));
+                    StartDialogue(reactStepIdx, TextFormat("Aprobacion %d/100. No me has convencido. Voto NO.", j.mood));
                 }
                 reactStepIdx++;
             } else {
                 stage = Stage::VERDICT_FINAL;
                 if (yesVotesCount >= 2) {
-                    StartDialogue(1, TextFormat("MISSION FUNDED: $%.2f BILLION! Proceed to the Rocket Lab to buy parts and build your Moon vehicle.", totalApprovedMillions / 1000.0f));
+                    StartDialogue(1, TextFormat("MISION APROBADA: $%.2f BILLONES! Pasa al Laboratorio para comprar las piezas y ensamblar tu cohete.", totalApprovedMillions / 1000.0f));
                 } else {
-                    StartDialogue(1, "GAME OVER: The board rejected the mission (fewer than 2 YES votes). Strengthen your numbers and try again.");
+                    StartDialogue(1, "MISION RECHAZADA: No lograste al menos 2 votos a favor. Mejora tus cifras y vuelve a intentarlo.");
                 }
             }
             break;
@@ -303,51 +318,46 @@ void CommitteePhase::AdvanceStage(SharedMissionData& missionData) {
 GameState CommitteePhase::Update(SharedMissionData& missionData) {
     float dt = GetFrameTime();
 
-    // Avanzar efecto máquina de escribir
     if (visibleChars < static_cast<float>(currentText.size())) {
-        visibleChars = std::min(static_cast<float>(currentText.size()), visibleChars + 90.0f * dt);
+        visibleChars = std::min(static_cast<float>(currentText.size()), visibleChars + 95.0f * dt);
     }
 
-    // Actualizar temporizadores de popups (+20 / -10)
     for (auto& j : judges) {
         if (j.popTimer > 0.0f) j.popTimer = std::max(0.0f, j.popTimer - dt);
     }
 
     Vector2 mousePos = GetMousePosition();
 
-    // Botón NASA DATA (arriba a la izquierda dentro del panel de presupuesto)[cite: 2]
-    Rectangle factBtn = { 340.0f, 34.0f, 115.0f, 34.0f };
+    Rectangle factBtn = { 330.0f, 34.0f, 125.0f, 34.0f };
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && CheckCollisionPointRec(mousePos, factBtn)) {
         showNasaFacts = !showNasaFacts;
         return GameState::COMMITTEE;
     }
 
     if (showNasaFacts) {
-        Rectangle closeFactBtn = { SCREEN_WIDTH - 220.0f, SCREEN_HEIGHT - 105.0f, 140.0f, 42.0f };
+        Rectangle closeFactBtn = { SCREEN_WIDTH - 235.0f, SCREEN_HEIGHT - 105.0f, 155.0f, 42.0f };
         if ((IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && CheckCollisionPointRec(mousePos, closeFactBtn)) || IsKeyPressed(KEY_ESCAPE)) {
             showNasaFacts = false;
         }
         return GameState::COMMITTEE;
     }
 
-    // Selección de modo (PICK FROM 3 vs WRITE MY OWN)
     if (stage == Stage::MODE_SELECT) {
-        Rectangle btnPick  = { 760.0f, 645.0f, 220.0f, 44.0f };
-        Rectangle btnWrite = { 1005.0f, 645.0f, 220.0f, 44.0f };
+        Rectangle btnPick  = { 735.0f, 645.0f, 245.0f, 44.0f };
+        Rectangle btnWrite = { 1000.0f, 645.0f, 240.0f, 44.0f };
 
         if ((IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && CheckCollisionPointRec(mousePos, btnPick)) || IsKeyPressed(KEY_ONE)) {
             writeMode = false;
             stage = Stage::PITCH_INTRO;
-            StartDialogue(1, "You have the floor. Tell us what this mission is and why we should fund it. Convince all three of us.");
+            StartDialogue(1, "Tienes la palabra. Explicanos en que consiste esta mision y por que debemos financiarla.");
         } else if ((IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && CheckCollisionPointRec(mousePos, btnWrite)) || IsKeyPressed(KEY_TWO)) {
             writeMode = true;
             stage = Stage::PITCH_INTRO;
-            StartDialogue(1, "You have the floor. Tell us what this mission is and why we should fund it. Convince all three of us.");
+            StartDialogue(1, "Tienes la palabra. Explicanos en que consiste esta mision y por que debemos financiarla.");
         }
         return GameState::COMMITTEE;
     }
 
-    // Selección de respuestas (PICK FROM 3)
     if (!writeMode && (stage == Stage::PITCH_INPUT || stage == Stage::JUDGE_ANSWER)) {
         for (size_t i = 0; i < currentChoices.size(); ++i) {
             Rectangle optRect = { 260.0f, 295.0f + i * 74.0f, 985.0f, 64.0f };
@@ -372,7 +382,6 @@ GameState CommitteePhase::Update(SharedMissionData& missionData) {
         return GameState::COMMITTEE;
     }
 
-    // Entrada de texto libre (WRITE MY OWN)
     if (writeMode && (stage == Stage::PITCH_INPUT || stage == Stage::JUDGE_ANSWER)) {
         int key = GetCharPressed();
         while (key > 0) {
@@ -386,7 +395,7 @@ GameState CommitteePhase::Update(SharedMissionData& missionData) {
         }
 
         Rectangle sendBtn = { 1065.0f, 645.0f, 160.0f, 44.0f };
-        bool canSend = userTypedText.size() >= 20;
+        bool canSend = userTypedText.size() >= 15;
         bool clickedSend = canSend && IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && CheckCollisionPointRec(mousePos, sendBtn);
 
         if (canSend && (clickedSend || IsKeyPressed(KEY_ENTER))) {
@@ -405,18 +414,17 @@ GameState CommitteePhase::Update(SharedMissionData& missionData) {
         return GameState::COMMITTEE;
     }
 
-    // Botón NEXT / IR AL LABORATORIO / REINTENTAR
-    Rectangle nextBtn = { 1005.0f, 645.0f, 220.0f, 44.0f };
+    Rectangle nextBtn = { 985.0f, 645.0f, 245.0f, 44.0f };
     bool clickedNext = IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && CheckCollisionPointRec(mousePos, nextBtn);
 
     if (clickedNext || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
         if (visibleChars < static_cast<float>(currentText.size())) {
-            visibleChars = static_cast<float>(currentText.size()); // Completar texto instantáneamente
+            visibleChars = static_cast<float>(currentText.size());
         } else if (stage == Stage::VERDICT_FINAL) {
             if (yesVotesCount >= 2) {
-                return GameState::HANGAR; // Pasar a Fase 2 (Tienda y Laboratorio)
+                return GameState::HANGAR;
             } else {
-                Init(); // Reiniciar audiencia si falló
+                Init();
             }
         } else {
             AdvanceStage(missionData);
@@ -427,7 +435,6 @@ GameState CommitteePhase::Update(SharedMissionData& missionData) {
 }
 
 void CommitteePhase::Draw(const SharedMissionData& missionData) const {
-    // 1. Fondo de la sala (sprites/bg.png o fallback)[cite: 1, 2]
     if (texBg.id > 0) {
         DrawTexturePro(texBg, { 0, 0, (float)texBg.width, (float)texBg.height },
                        { 0, 0, (float)SCREEN_WIDTH, (float)SCREEN_HEIGHT }, { 0, 0 }, 0.0f, WHITE);
@@ -435,7 +442,6 @@ void CommitteePhase::Draw(const SharedMissionData& missionData) const {
         ClearBackground(Color{ 39, 49, 92, 255 });
     }
 
-    // 2. Los 3 Jueces + Barras de Aprobación + Caras (:), :|, :()[cite: 2]
     for (int i = 0; i < 3; ++i) {
         const auto& j = judges[i];
         float hopY = (activeSpeakerIdx == i) ? std::sin(static_cast<float>(GetTime()) * 16.0f) * 5.0f : 0.0f;
@@ -448,7 +454,6 @@ void CommitteePhase::Draw(const SharedMissionData& missionData) const {
             DrawRectangleLines(static_cast<int>(j.posX - 50), static_cast<int>(80 + hopY), 100, 150, BLACK);
         }
 
-        // Barra vertical de aprobación[cite: 2]
         int barX = static_cast<int>(j.posX + 68);
         int barY = 78;
         int barH = 148;
@@ -462,14 +467,12 @@ void CommitteePhase::Draw(const SharedMissionData& missionData) const {
         DrawRectangle(barX + 3, barY + barH - 3 - fillH, 18, fillH, barCol);
         DrawRectangleLinesEx({ (float)barX, (float)barY, 24.0f, (float)barH }, 3.0f, BLACK);
 
-        // Popup flotante (+20 / -10)[cite: 2]
         if (j.popTimer > 0.0f && j.lastDelta != 0) {
             Color popCol = (j.lastDelta > 0) ? GREEN : RED;
             DrawText(TextFormat("%+d", j.lastDelta), barX - 10, static_cast<int>(barY - 52 - (1.5f - j.popTimer) * 15.0f), 22, popCol);
         }
     }
 
-    // 3. Mesa del comité en primer plano (sprites/desk.png) y placas doradas[cite: 1, 2]
     if (texDesk.id > 0) {
         DrawTexturePro(texDesk, { 0, 0, (float)texDesk.width, (float)texDesk.height },
                        { 470.0f, 228.0f, 810.0f, 492.0f }, { 0, 0 }, 0.0f, WHITE);
@@ -479,42 +482,39 @@ void CommitteePhase::Draw(const SharedMissionData& missionData) const {
     }
 
     for (const auto& j : judges) {
-        Rectangle plate = { j.posX - 78.0f, 282.0f, 156.0f, 42.0f };
+        Rectangle plate = { j.posX - 84.0f, 282.0f, 168.0f, 42.0f };
         DrawRectangleRec(plate, Color{ 242, 193, 78, 255 });
         DrawRectangleLinesEx(plate, 3.0f, BLACK);
-        DrawText(j.name.c_str(), static_cast<int>(plate.x + 10), static_cast<int>(plate.y + 6), 13, BLACK);
-        DrawText(j.role.c_str(), static_cast<int>(plate.x + 10), static_cast<int>(plate.y + 22), 12, Color{ 50, 40, 20, 255 });
+        DrawText(j.name.c_str(), static_cast<int>(plate.x + 8), static_cast<int>(plate.y + 6), 12, BLACK);
+        DrawText(j.role.c_str(), static_cast<int>(plate.x + 8), static_cast<int>(plate.y + 22), 12, Color{ 50, 40, 20, 255 });
     }
 
-    // 4. Panel de Presupuesto (Arriba Izquierda)[cite: 2]
     DrawRectangle(20, 20, 450, 235, Color{ 13, 17, 36, 255 });
     DrawRectangleLinesEx({ 20, 20, 450, 235 }, 4.0f, Color{ 242, 193, 78, 255 });
-    DrawText("MISSION BUDGET", 38, 36, 20, Color{ 242, 193, 78, 255 });
+    DrawText("PRESUPUESTO MISION", 38, 36, 19, Color{ 242, 193, 78, 255 });
 
-    // Botón NASA DATA[cite: 2]
-    Rectangle factBtn = { 340.0f, 34.0f, 115.0f, 34.0f };
+    Rectangle factBtn = { 330.0f, 34.0f, 125.0f, 34.0f };
     DrawRectangleRec(factBtn, Color{ 242, 193, 78, 255 });
     DrawRectangleLinesEx(factBtn, 2.0f, BLACK);
-    DrawText("NASA DATA", 350, 44, 15, BLACK);
+    DrawText("DATOS NASA", 340, 44, 15, BLACK);
 
     if (stage == Stage::VERDICT_FINAL && yesVotesCount >= 2) {
-        DrawText(TextFormat("$ %.2f BILLION", totalApprovedMillions / 1000.0f), 38, 74, 32, WHITE);
+        DrawText(TextFormat("$ %.2f BILLONES", totalApprovedMillions / 1000.0f), 38, 74, 30, WHITE);
     } else if (stage == Stage::VERDICT_FINAL) {
-        DrawText("$ 0.0 BILLION", 38, 74, 32, RED);
+        DrawText("$ 0.0 BILLONES", 38, 74, 30, RED);
     } else {
-        DrawText("$ ??? BILLION", 38, 74, 32, WHITE);
+        DrawText("$ ??? BILLONES", 38, 74, 30, WHITE);
     }
 
     for (size_t i = 0; i < judges.size(); ++i) {
         int rowY = 128 + static_cast<int>(i) * 36;
-        DrawText(judges[i].name.c_str(), 38, rowY, 18, Color{ 201, 208, 240, 255 });
+        DrawText(judges[i].name.c_str(), 38, rowY, 17, Color{ 201, 208, 240, 255 });
         const char* pledgeTxt = (judges[i].pledgedMillions < 0) ? "..." :
                                 (judges[i].pledgedMillions == 0) ? "NO" :
                                 TextFormat("$ %.2f B", judges[i].pledgedMillions / 1000.0f);
         DrawText(pledgeTxt, 355, rowY, 19, Color{ 242, 193, 78, 255 });
     }
 
-    // 5. Personaje del Jugador (sprites/hero.png)[cite: 1, 2]
     if (texHero.id > 0) {
         DrawTexturePro(texHero, { 0, 0, (float)texHero.width, (float)texHero.height },
                        { 8.0f, 445.0f, 225.0f, 315.0f }, { 0, 0 }, 0.0f, WHITE);
@@ -522,11 +522,10 @@ void CommitteePhase::Draw(const SharedMissionData& missionData) const {
         DrawRectangle(25, 480, 180, 240, DARKBLUE);
     }
 
-    // 6. Panel de Opciones (Modo PICK FROM 3)[cite: 2]
     if (!writeMode && (stage == Stage::PITCH_INPUT || stage == Stage::JUDGE_ANSWER)) {
         DrawRectangle(245, 245, 1015, 280, Color{ 244, 236, 216, 255 });
         DrawRectangleLinesEx({ 245, 245, 1015, 280 }, 4.0f, BLACK);
-        DrawText("CHOOSE YOUR ANSWER [Teclas 1-3 o Clic]:", 265, 260, 18, Color{ 90, 83, 72, 255 });
+        DrawText("ELIGE TU RESPUESTA [Teclas 1-3 o Clic]:", 265, 260, 18, Color{ 90, 83, 72, 255 });
 
         Vector2 mousePos = GetMousePosition();
         for (size_t i = 0; i < currentChoices.size(); ++i) {
@@ -535,19 +534,17 @@ void CommitteePhase::Draw(const SharedMissionData& missionData) const {
             DrawRectangleRec(optRect, hover ? Color{ 242, 193, 78, 255 } : Color{ 255, 250, 240, 255 });
             DrawRectangleLinesEx(optRect, 3.0f, BLACK);
 
-            const char* letter = (i == 0) ? "[A]" : ((i == 1) ? "[B]" : "[C]");
+            const char* letter = (i == 0) ? "[1]" : ((i == 1) ? "[2]" : "[3]");
             DrawText(letter, 272, static_cast<int>(optRect.y + 18), 20, BLACK);
             DrawWrappedText(currentChoices[i].text, 318.0f, optRect.y + 10.0f, 910.0f, 18, Color{ 27, 27, 38, 255 });
         }
     }
 
-    // 7. Caja de Diálogo Inferior[cite: 2]
     DrawRectangle(245, 535, 1015, 170, Color{ 244, 236, 216, 255 });
     DrawRectangleLinesEx({ 245, 535, 1015, 170 }, 4.0f, BLACK);
 
-    // Etiqueta de quién habla[cite: 2]
-    std::string speakerName = "NARRATOR";
-    if (activeSpeakerIdx == -2) speakerName = "YOU - THE ECONOMIST";
+    std::string speakerName = "NARRADOR";
+    if (activeSpeakerIdx == -2) speakerName = "TU - ECONOMISTA DE MISION";
     else if (activeSpeakerIdx >= 0 && activeSpeakerIdx < 3) speakerName = judges[activeSpeakerIdx].name;
 
     int tagW = MeasureText(speakerName.c_str(), 18) + 28;
@@ -555,7 +552,6 @@ void CommitteePhase::Draw(const SharedMissionData& missionData) const {
     DrawRectangleLinesEx({ 262.0f, 514.0f, (float)tagW, 32.0f }, 3.0f, BLACK);
     DrawText(speakerName.c_str(), 276, 521, 18, Color{ 242, 193, 78, 255 });
 
-    // Texto de diálogo o caja de escritura
     if (writeMode && (stage == Stage::PITCH_INPUT || stage == Stage::JUDGE_ANSWER)) {
         DrawText(currentText.c_str(), 268, 554, 18, Color{ 90, 83, 72, 255 });
         DrawRectangle(268, 580, 780, 108, Color{ 255, 250, 240, 255 });
@@ -563,31 +559,30 @@ void CommitteePhase::Draw(const SharedMissionData& missionData) const {
         DrawWrappedText(userTypedText + "_", 278.0f, 590.0f, 760.0f, 19, BLACK);
 
         Rectangle sendBtn = { 1065.0f, 645.0f, 160.0f, 44.0f };
-        bool canSend = userTypedText.size() >= 20;
+        bool canSend = userTypedText.size() >= 15;
         DrawRectangleRec(sendBtn, canSend ? Color{ 27, 27, 38, 255 } : GRAY);
-        DrawText("SEND >", 1105, 657, 19, WHITE);
+        DrawText("ENVIAR >", 1095, 657, 19, WHITE);
     } else {
         std::string shown = currentText.substr(0, static_cast<size_t>(visibleChars));
-        DrawWrappedText(shown, 268.0f, 558.0f, 965.0f, 22, Color{ 27, 27, 38, 255 });
+        DrawWrappedText(shown, 268.0f, 558.0f, 965.0f, 21, Color{ 27, 27, 38, 255 });
 
         if (stage == Stage::MODE_SELECT) {
-            Rectangle btnPick  = { 760.0f, 645.0f, 220.0f, 44.0f };
-            Rectangle btnWrite = { 1005.0f, 645.0f, 220.0f, 44.0f };
+            Rectangle btnPick  = { 735.0f, 645.0f, 245.0f, 44.0f };
+            Rectangle btnWrite = { 1000.0f, 645.0f, 240.0f, 44.0f };
             DrawRectangleRec(btnPick, Color{ 27, 27, 38, 255 });
-            DrawText("[1] PICK FROM 3", 785, 657, 18, Color{ 242, 193, 78, 255 });
+            DrawText("[1] ELEGIR ENTRE 3", 752, 657, 17, Color{ 242, 193, 78, 255 });
             DrawRectangleRec(btnWrite, Color{ 27, 27, 38, 255 });
-            DrawText("[2] WRITE MY OWN", 1025, 657, 18, WHITE);
+            DrawText("[2] ESCRIBIR YO", 1025, 657, 17, WHITE);
         } else if (stage != Stage::PITCH_INPUT && stage != Stage::JUDGE_ANSWER) {
-            Rectangle nextBtn = { 1005.0f, 645.0f, 220.0f, 44.0f };
+            Rectangle nextBtn = { 985.0f, 645.0f, 245.0f, 44.0f };
             DrawRectangleRec(nextBtn, (stage == Stage::VERDICT_FINAL && yesVotesCount >= 2) ? DARKGREEN : Color{ 27, 27, 38, 255 });
             const char* btnLabel = (stage == Stage::VERDICT_FINAL)
-                ? (yesVotesCount >= 2 ? "GO TO LAB >" : "TRY AGAIN")
-                : "NEXT >";
-            DrawText(btnLabel, 1045, 657, 19, Color{ 242, 193, 78, 255 });
+                ? (yesVotesCount >= 2 ? "IR AL LABORATORIO >" : "REINTENTAR")
+                : "SIGUIENTE >";
+            DrawText(btnLabel, 1005, 657, 18, Color{ 242, 193, 78, 255 });
         }
     }
 
-    // 8. Modal de NASA DATA (Cifras reales de NASA OIG)[cite: 2]
     if (showNasaFacts) {
         DrawNasaFactsModal();
     }
@@ -598,22 +593,22 @@ void CommitteePhase::DrawNasaFactsModal() const {
     DrawRectangle(80, 60, SCREEN_WIDTH - 160, SCREEN_HEIGHT - 120, Color{ 244, 236, 216, 255 });
     DrawRectangleLinesEx({ 80, 60, SCREEN_WIDTH - 160, SCREEN_HEIGHT - 120 }, 4.0f, Color{ 242, 193, 78, 255 });
 
-    DrawText("YOUR NOTES: WHAT MOON MISSIONS REALLY COST (NASA OIG DATA)", 110, 85, 22, BLACK);
+    DrawText("TUS NOTAS: CUANTO CUESTA REALMENTE IR A LA LUNA (AUDITORIA NASA OIG)", 105, 85, 20, BLACK);
     const char* bullets[] = {
-        "- Launching NASA's SLS rocket + Orion capsule costs ~$4.1 billion per flight (IG-22-003).",
-        "- The Orion capsule alone costs ~$1.0 billion, plus ~$300 million for its service module.",
-        "- NASA's entire Artemis program (2012-2025) is projected at ~$93 billion (IG-22-003).",
-        "- Cost-plus contracts overran: SLS grew +33% and Artemis I flew ~$4.3B over budget (IG-24-001).",
-        "- Moon landers use FIXED-PRICE deals: SpaceX ($2.89B) and Blue Origin ($3.4B) stayed near budget (IG-26-004).",
-        "- Robotic lunar landers (CLPS) cost $80M-$200M each, averaging 26% cost growth (IG-24-013).",
-        "- Realistic budget for ONE crewed Moon landing: $4.0B to $6.5B (board max is $6.5B)."
+        "- Lanzar el cohete SLS + capsula Orion cuesta ~4.100 millones $ por vuelo (IG-22-003).",
+        "- La capsula Orion cuesta ~1.000M$ mas ~300M$ de su modulo de servicio.",
+        "- Todo el programa Artemis (2012-2025) asciende a ~93.000 millones $ (IG-22-003).",
+        "- Contratos de coste reembolsable se dispararon: SLS subio +33% y Artemis I +4.300M$ (IG-24-001).",
+        "- Aterrizadores a PRECIO FIJO: SpaceX (2.890M$) y Blue Origin (3.400M$) apenas variaron (IG-26-004).",
+        "- Sondas roboticas (CLPS) cuestan 80M$-200M$ cada una, con 26% de sobrecoste medio (IG-24-013).",
+        "- Presupuesto realista para UNA mision tripulada: entre 4.000M$ y 6.500M$ (tope del comite)."
     };
 
     for (int i = 0; i < 7; ++i) {
-        DrawText(bullets[i], 115, 138 + i * 54, 20, Color{ 27, 27, 38, 255 });
+        DrawText(bullets[i], 110, 138 + i * 54, 19, Color{ 27, 27, 38, 255 });
     }
 
-    Rectangle closeBtn = { SCREEN_WIDTH - 220.0f, SCREEN_HEIGHT - 105.0f, 140.0f, 42.0f };
+    Rectangle closeBtn = { SCREEN_WIDTH - 235.0f, SCREEN_HEIGHT - 105.0f, 155.0f, 42.0f };
     DrawRectangleRec(closeBtn, Color{ 27, 27, 38, 255 });
-    DrawText("CLOSE [ESC]", static_cast<int>(closeBtn.x + 16), static_cast<int>(closeBtn.y + 12), 16, Color{ 242, 193, 78, 255 });
+    DrawText("CERRAR [ESC]", static_cast<int>(closeBtn.x + 16), static_cast<int>(closeBtn.y + 12), 16, Color{ 242, 193, 78, 255 });
 }
