@@ -3,8 +3,8 @@
 #include "game_types.h"
 #include "raylib.h"
 #include <vector>
+#include <string>
 
-// Estructura interna exclusiva de la Tienda (evita tocar game_types.h)
 struct ShopItem {
     RocketPart part;
     bool purchased = false;
@@ -19,21 +19,21 @@ public:
     void Draw(const SharedMissionData& missionData) const;
 
 private:
-    // Inventario de la tienda por categorías
     std::vector<ShopItem> capsuleItems;
     std::vector<ShopItem> tankItems;
     std::vector<ShopItem> engineItems;
 
-    // Pestaña activa en la tienda (0 = Cápsulas, 1 = Tanques, 2 = Motores)
     int activeTab = 0;
 
-    // Índices de las piezas actualmente montadas en el cohete (-1 = ranura vacía)
     int equippedCapsuleIdx = -1;
     int equippedTankIdx    = -1;
     int equippedEngineIdx  = -1;
 
-    // Mensaje de estado en la tienda (ej. "Pieza comprada", "Saldo insuficiente")
-    std::string shopFeedback = "Selecciona una categoría y compra las 3 piezas para tu cohete.";
+    // Variables para las mejoras visuales y físicas
+    float scanAnimTimer   = 0.0f; // Temporizador del láser de escaneo al montar pieza
+    float estimatedDeltaV = 0.0f; // Delta-V calculado con la ecuación de Tsiolkovsky
+
+    std::string shopFeedback = "Compra una Cápsula, un Tanque y un Motor con tu presupuesto.";
     Color feedbackColor = LIGHTGRAY;
 
     // --- HUECOS PARA TUS SPRITES ---
