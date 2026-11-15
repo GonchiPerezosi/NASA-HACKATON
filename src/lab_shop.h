@@ -1,5 +1,4 @@
 #pragma once
-
 #include "games_types.h"
 #include <string>
 #include <vector>
@@ -14,24 +13,50 @@ public:
     void Unload();
 
 private:
-    Texture2D texLabBg{};
-    bool bgLoaded = false;
+    enum class PartCategory {
+        CAPSULE = 0,
+        LANDER  = 1,
+        TANK    = 2,
+        ENGINE  = 3,
+        BOOSTER = 4
+    };
 
-    // PNGs del cohete cargados automaticamente desde assets/sprites/
-    std::vector<Texture2D> rocketPngs;
-    std::vector<std::string> rocketPngNames;
+    struct ShopItem {
+        int id = 0;
+        PartCategory category = PartCategory::CAPSULE;
+        std::string nameEs;
+        std::string nameEn;
+        std::string descEs;
+        std::string descEn;
+        float costMillions = 0.0f;
+        float dryMassTons = 0.0f;
+        float fuelTons = 0.0f;
+        float thrustKN = 0.0f;
+        float isp = 0.0f;
+        bool owned = false;
+    };
 
-    int selectedFilter = 0; // 0 = TODAS, 1 = CAPSULE, 2 = LANDER, 3 = TANK, 4 = ENGINE, 5 = BOOSTER
-    float scrollY = 0.0f;
-    float maxScrollY = 0.0f;
-    bool draggingScrollbar = false;
+    Texture2D texLaboratory{};
+    Texture2D texAngar{};
+    Texture2D texCapsules[6]{};
+    Texture2D texLanders[6]{};
+    Texture2D texTanks[6]{};
+    Texture2D texEngines[6]{};
+    Texture2D texBoosters[5]{};
+    bool texturesLoaded = false;
 
-    std::vector<RocketPart> parts;
-    float saveTimer = 0.0f;
+    std::vector<ShopItem> catalog;
+    PartCategory activeCategory = PartCategory::CAPSULE;
 
-    void LoadRocketSprites();
+    float saveNoticeTimer = 0.0f;
+    float alertTimer = 0.0f;
+    std::string alertMsgEs;
+    std::string alertMsgEn;
+
+    void BuildCatalog();
+    void ResetOwnershipToStarter();
     void RecalculateRocket(SharedMissionData& data);
-    std::vector<int> GetFilteredPartIndices() const;
-    int GetActiveRocketSpriteIndex(const SharedMissionData& data) const;
-    bool CanReachLunarOrbit(const SharedMissionData& data, std::string& outReason) const;
+    int GetEquippedIndexForCategory(const SharedMissionData& data, PartCategory cat) const;
+    void SetEquippedIndexForCategory(SharedMissionData& data, PartCategory cat, int itemIdx);
+    void DrawRocketPreview(const SharedMissionData& data, float centerX, float bottomY, float scale) const;
 };

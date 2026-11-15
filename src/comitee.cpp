@@ -3,6 +3,29 @@
 #include <algorithm>
 #include <cmath>
 
+namespace {
+    // 0 = Cadete (Facil), 1 = Ingeniero NASA (Normal), 2 = Comandante Apolo (Dificil)
+    int s_selectedDifficulty = 1;
+
+    struct DifficultyConfig {
+        float startTrust;
+        float gainMultiplier;
+        float lossMultiplier;
+        float baseBudget;
+        float budgetSpan;
+    };
+
+    DifficultyConfig GetDifficultyConfig(int diff) {
+        if (diff == 0) {
+            return { 0.54f, 1.25f, 0.50f, 1100.0f, 1850.0f };
+        }
+        if (diff == 2) {
+            return { 0.24f, 0.95f, 1.40f, 700.0f, 2050.0f };
+        }
+        return { 0.38f, 1.00f, 1.00f, 850.0f, 1900.0f };
+    }
+}
+
 void CommitteePhase::Init(Language lang) {
     (void)lang;
     if (!texturesLoaded) {
@@ -22,9 +45,10 @@ void CommitteePhase::Init(Language lang) {
     showNasaFacts = false;
     nasaFactsPage = 0;
 
-    trustHale = 0.36f;
-    trustBrooks = 0.36f;
-    trustVance = 0.36f;
+    DifficultyConfig cfg = GetDifficultyConfig(s_selectedDifficulty);
+    trustHale = cfg.startTrust;
+    trustBrooks = cfg.startTrust;
+    trustVance = cfg.startTrust;
 
     lastDeltaHale = 0;
     lastDeltaBrooks = 0;
@@ -458,12 +482,31 @@ GameState CommitteePhase::Update(SharedMissionData& data) {
         }
 
         if (step == 0) {
-            Rectangle btnNext = { 980.0f, 650.0f, 235.0f, 44.0f };
+            // Selector de dificultad (0: Cadete, 1: Ingeniero, 2: Comandante)
+            for (int d = 0; d < 3; ++d) {
+                Rectangle diffBtn = { 265.0f + d * 322.0f, 532.0f, 306.0f, 54.0f };
+                if (CheckCollisionPointRec(mouse, diffBtn)) {
+                    s_selectedDifficulty = d;
+                    DifficultyConfig cfg = GetDifficultyConfig(s_selectedDifficulty);
+                    trustHale = cfg.startTrust;
+                    trustBrooks = cfg.startTrust;
+                    trustVance = cfg.startTrust;
+                    return GameState::COMMITTEE;
+                }
+            }
+
+            Rectangle btnNext = { 965.0f, 650.0f, 250.0f, 44.0f };
             if (CheckCollisionPointRec(mouse, btnNext)) {
                 step = 1;
             }
         } else if (step >= 1 && step <= totalQ) {
             int qIdx = step - 1;
+            DifficultyConfig cfg = GetDifficultyConfig(s_selectedDifficulty);
+
+            auto applyScale = [&](float rawDelta) -> float {
+                return (rawDelta >= 0.0f) ? (rawDelta * cfg.gainMultiplier) : (rawDelta * cfg.lossMultiplier);
+            };
+
             for (int i = 0; i < 3; ++i) {
                 Rectangle optBtn = { 262.0f, 562.0f + i * 44.0f, 955.0f, 38.0f };
                 if (CheckCollisionPointRec(mouse, optBtn)) {
@@ -471,9 +514,9 @@ GameState CommitteePhase::Update(SharedMissionData& data) {
                     float prevB = trustBrooks;
                     float prevV = trustVance;
 
-                    trustHale   = std::clamp(trustHale   + questions[qIdx].haleDelta[i],   0.02f, 1.0f);
-                    trustBrooks = std::clamp(trustBrooks + questions[qIdx].brooksDelta[i], 0.02f, 1.0f);
-                    trustVance  = std::clamp(trustVance  + questions[qIdx].vanceDelta[i],  0.02f, 1.0f);
+                    trustHale   = std::clamp(trustHale   + applyScale(questions[qIdx].haleDelta[i]),   0.02f, 1.0f);
+                    trustBrooks = std::clamp(trustBrooks + applyScale(questions[qIdx].brooksDelta[i]), 0.02f, 1.0f);
+                    trustVance  = std::clamp(trustVance  + applyScale(questions[qIdx].vanceDelta[i]),  0.02f, 1.0f);
 
                     lastDeltaHale   = static_cast<int>(std::round((trustHale   - prevH) * 100.0f));
                     lastDeltaBrooks = static_cast<int>(std::round((trustBrooks - prevB) * 100.0f));
@@ -487,7 +530,7 @@ GameState CommitteePhase::Update(SharedMissionData& data) {
                     if (step == delibStep) {
                         deliberationLine = 0;
                         float avg = (trustHale + trustBrooks + trustVance) / 3.0f;
-                        data.awardedBudget = 850.0f + std::pow(avg, 1.15f) * 1900.0f;
+                        data.awardedBudget = cfg.baseBudget + std::pow(avg, 1.15f) * cfg.budgetSpan;
                         data.remainingBudget = data.awardedBudget;
                     }
                     break;
@@ -632,21 +675,58 @@ void CommitteePhase::Draw(const SharedMissionData& data) {
     DrawRectangleLinesEx({ 245.0f, 488.0f, 995.0f, 216.0f }, 3.0f, Color{ 15, 20, 35, 255 });
 
     if (step == 0) {
-        DrawRectangle(265, 468, 175, 30, Color{ 15, 20, 35, 255 });
-        DrawUIText(Tr(data.lang, "NARRADOR", "NARRATOR"), 288.0f, 473.0f, 18.0f, GOLD);
+        DrawRectangle(265, 468, 265, 30, Color{ 15, 20, 35, 255 });
+        DrawUIText(Tr(data.lang, "PREPARACIÓN DE MISIÓN", "MISSION BRIEFING"), 282.0f, 473.0f, 17.0f, GOLD);
 
-        DrawUIText(Tr(data.lang, "FASE 1 · AUDITORÍA EXIGENTE DEL COMITÉ DE LA NASA (12 RONDAS)",
-                                "PHASE 1 · STRICT NASA COMMITTEE AUDIT (12 ROUNDS)"), 265.0f, 510.0f, 22.0f, BLACK, false);
+        DrawUIText(Tr(data.lang,
+            "SELECCIONA LA DIFICULTAD DE LA AUDITORÍA DEL CONGRESO (12 RONDAS):",
+            "SELECT CONGRESSIONAL HEARING DIFFICULTY (12 ROUNDS):"),
+            265.0f, 504.0f, 20.0f, BLACK, false);
 
-        DrawUITextBoxed(Tr(data.lang,
-            "Partes con solo un 36% de confianza. Deberás superar 12 rondas técnicas y financieras con rigor: cada fallo resta mucha aprobación y puede dejarte sin fondos suficientes para construir un cohete capaz de alcanzar la órbita lunar.\n"
-            "Consejo: Estudia DATOS NASA (arriba a la izquierda) antes de responder.",
-            "You start with only 36% trust. You must pass 12 technical and fiscal rounds: every mistake heavily penalizes approval and may leave you short of funds to build a Moon-capable rocket.\n"
-            "Tip: Review NASA FACTS (top left) before answering."),
-            { 265.0f, 544.0f, 950.0f, 100.0f }, 19.0f, 4.0f, DARKGRAY, false);
+        const char* diffTitlesEs[3] = { "1. CADETE (FÁCIL)", "2. INGENIERO (NORMAL)", "3. COMANDANTE (DIFÍCIL)" };
+        const char* diffTitlesEn[3] = { "1. CADET (EASY)", "2. ENGINEER (NORMAL)", "3. COMMANDER (HARD)" };
+        const char* diffDescEs[3]   = { "Inicio 54% · Fallos -50%", "Inicio 38% · Estándar", "Inicio 24% · Crítico +40%" };
+        const char* diffDescEn[3]   = { "Start 54% · Loss -50%", "Start 38% · Standard", "Start 24% · Critical +40%" };
+        Color diffAccent[3]         = { GREEN, GOLD, Color{ 255, 95, 95, 255 } };
 
-        DrawRectangle(980, 650, 235, 44, Color{ 15, 20, 35, 255 });
-        DrawUIText(Tr(data.lang, "COMENZAR >", "START HEARING >"), 1020.0f, 660.0f, 20.0f, GOLD);
+        for (int d = 0; d < 3; ++d) {
+            Rectangle diffBtn = { 265.0f + d * 322.0f, 532.0f, 306.0f, 54.0f };
+            bool selected = (s_selectedDifficulty == d);
+            bool hover = CheckCollisionPointRec(GetMousePosition(), diffBtn);
+
+            DrawRectangleRec(diffBtn, selected ? Color{ 24, 46, 86, 255 } : (hover ? Color{ 34, 44, 70, 255 } : Color{ 16, 22, 38, 255 }));
+            DrawRectangleLinesEx(diffBtn, selected ? 2.5f : 1.5f, selected ? diffAccent[d] : GRAY);
+
+            DrawUIText(Tr(data.lang, diffTitlesEs[d], diffTitlesEn[d]), diffBtn.x + 12.0f, diffBtn.y + 7.0f, 17.0f, selected ? diffAccent[d] : WHITE);
+            DrawUIText(Tr(data.lang, diffDescEs[d], diffDescEn[d]), diffBtn.x + 12.0f, diffBtn.y + 30.0f, 14.0f, LIGHTGRAY);
+        }
+
+        // Cita historica de astronauta segun dificultad seleccionada
+        const char* quoteEs = "\"Las estrellas no parecen más grandes, pero se ven muchísimo más brillantes.\" — Sally Ride (STS-7)";
+        const char* quoteEn = "\"The stars don't look bigger, but they look much brighter.\" — Sally Ride (STS-7)";
+
+        if (s_selectedDifficulty == 1) {
+            quoteEs = "\"El misterio crea asombro, y el asombro es la base del deseo humano por comprender.\" — Neil Armstrong (Apolo 11)";
+            quoteEn = "\"Mystery creates wonder and wonder is the basis of man's desire to understand.\" — Neil Armstrong (Apollo 11)";
+        } else if (s_selectedDifficulty == 2) {
+            quoteEs = "\"Existen personas que hacen que las cosas pasen, personas que miran lo que pasa y personas que se preguntan qué pasó.\" — Jim Lovell (Apolo 13)";
+            quoteEn = "\"There are people who make things happen, people who watch things happen, and people who wonder what happened.\" — Jim Lovell (Apollo 13)";
+        }
+
+        DrawRectangle(265, 593, 950, 50, Color{ 16, 24, 44, 250 });
+        DrawRectangle(265, 593, 6, 50, diffAccent[s_selectedDifficulty]);
+        DrawUITextBoxed(Tr(data.lang, quoteEs, quoteEn),
+                        { 282.0f, 598.0f, 920.0f, 42.0f }, 15.0f, 2.0f, Color{ 245, 232, 185, 255 });
+
+        DrawUIText(Tr(data.lang,
+            "Consejo: Revisa DATOS NASA arriba a la izquierda antes de responder.",
+            "Tip: Check NASA FACTS at top-left before answering."),
+            265.0f, 661.0f, 16.0f, DARKGRAY, false);
+
+        Rectangle btnNext = { 965.0f, 650.0f, 250.0f, 44.0f };
+        DrawRectangleRec(btnNext, Color{ 15, 20, 35, 255 });
+        DrawRectangleLinesEx(btnNext, 2.0f, GOLD);
+        DrawUIText(Tr(data.lang, "COMENZAR >", "START HEARING >"), 1022.0f, 660.0f, 20.0f, GOLD);
     } else if (step >= 1 && step <= totalQ) {
         const auto& q = questions[step - 1];
         DrawRectangle(265, 468, 410, 30, Color{ 15, 20, 35, 255 });
@@ -724,7 +804,6 @@ void CommitteePhase::Draw(const SharedMissionData& data) {
         float programBillions = (displayedBudget * 35.0f) / 1000.0f;
 
         if (goodBudget) {
-            // RESOLUCIÓN POSITIVA (DORADA Y CELEBRATORIA)
             float pulse = 1.0f + 0.04f * std::sin(epicRevealTimer * 6.0f);
 
             DrawRectangle(252, 495, 981, 202, Color{ 255, 232, 165, 255 });
@@ -758,7 +837,6 @@ void CommitteePhase::Draw(const SharedMissionData& data) {
             DrawRectangleLinesEx(btnToLab, 2.0f, BLACK);
             DrawUIText(Tr(data.lang, "IR AL LABORATORIO >", "GO TO ASSEMBLY LAB >"), 942.0f, 660.0f, 20.0f, WHITE);
         } else {
-            // RESOLUCIÓN NEGATIVA (ROJO OSCURO / REPRIMENDA / SIN CELEBRACIÓN)
             DrawRectangle(252, 495, 981, 202, Color{ 56, 20, 24, 252 });
             DrawRectangleLinesEx({ 252.0f, 495.0f, 981.0f, 202.0f }, 3.0f, Color{ 225, 55, 55, 255 });
 
