@@ -1,50 +1,37 @@
 #pragma once
 
 #include "games_types.h"
-#include "raylib.h"
-#include <vector>
 #include <string>
-
-struct ShopItem {
-    RocketPart part;
-    bool purchased = false;
-    Texture2D texture = { 0 };
-    Color tint = WHITE;
-};
+#include <vector>
 
 class LabShopPhase {
 public:
     void Init();
+    void OnEnter(SharedMissionData& data);
+    void RestoreFromSave(SharedMissionData& data);
+    GameState Update(SharedMissionData& data);
+    void Draw(const SharedMissionData& data);
     void Unload();
-    void OnEnter(SharedMissionData& missionData);
-    GameState Update(SharedMissionData& missionData);
-    void Draw(const SharedMissionData& missionData) const;
 
 private:
-    std::vector<ShopItem> capsuleItems;
-    std::vector<ShopItem> landerItems;
-    std::vector<ShopItem> tankItems;
-    std::vector<ShopItem> engineItems;
-    std::vector<ShopItem> boosterItems;
+    Texture2D texLabBg{};
+    bool bgLoaded = false;
 
-    int activeTab = 0;
-    float scrollOffset = 0.0f;
+    // PNGs del cohete cargados automaticamente desde assets/sprites/
+    std::vector<Texture2D> rocketPngs;
+    std::vector<std::string> rocketPngNames;
 
-    int equippedCapsuleIdx = -1;
-    int equippedLanderIdx  = -1;
-    int equippedTankIdx    = -1;
-    int equippedEngineIdx  = -1;
-    int equippedBoosterIdx = 0;
+    int selectedFilter = 0; // 0 = TODAS, 1 = CAPSULE, 2 = LANDER, 3 = TANK, 4 = ENGINE, 5 = BOOSTER
+    float scrollY = 0.0f;
+    float maxScrollY = 0.0f;
+    bool draggingScrollbar = false;
 
-    float scanAnimTimer   = 0.0f;
-    float estimatedDeltaV = 0.0f;
+    std::vector<RocketPart> parts;
+    float saveTimer = 0.0f;
 
-    std::string shopFeedback = "Usa la rueda del raton para explorar las 30 piezas disponibles.";
-    Color feedbackColor = LIGHTGRAY;
-
-    Texture2D texLabBg = { 0 };
-
-    void HandleShopInteraction(std::vector<ShopItem>& currentList, int& equippedIdx, bool isOptional, SharedMissionData& missionData);
-    void DrawShopList(const std::vector<ShopItem>& currentList, int equippedIdx, float budget) const;
-    void RecalculateRocketStats(SharedMissionData& missionData);
+    void LoadRocketSprites();
+    void RecalculateRocket(SharedMissionData& data);
+    std::vector<int> GetFilteredPartIndices() const;
+    int GetActiveRocketSpriteIndex(const SharedMissionData& data) const;
+    bool CanReachLunarOrbit(const SharedMissionData& data, std::string& outReason) const;
 };

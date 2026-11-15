@@ -1,99 +1,62 @@
 #pragma once
 
 #include "games_types.h"
-#include "raylib.h"
 #include <string>
 #include <vector>
 
-struct BoardJudge {
-    std::string id;
-    std::string name;
-    std::string role;
-    float posX = 0.0f;
-    int maxContributionMillions = 2000;
-    int mood = 50;
-    int pledgedMillions = -1;
-
-    int lastDelta = 0;
-    float popTimer = 0.0f;
-
-    std::string question;
-    std::vector<std::string> options;
-    std::vector<std::string> keywords;
-
-    // Frases propias de cada juez para que nunca repitan la misma línea
-    std::string reactPositive;
-    std::string reactNeutral;
-    std::string reactNegative;
-    std::string reactPickGood;
-    std::string reactPickBad;
-
-    Texture2D sprite = { 0 };
-    Color fallbackColor = SKYBLUE;
-};
-
-struct ShuffledChoice {
-    std::string text;
-    bool isBest = false;
+struct CommitteeQuestion {
+    std::string topicEs;
+    std::string topicEn;
+    std::string speakerEs;
+    std::string speakerEn;
+    std::string textEs;
+    std::string textEn;
+    std::string optionsEs[3];
+    std::string optionsEn[3];
+    std::string feedbackEs[3];
+    std::string feedbackEn[3];
+    float haleDelta[3];
+    float brooksDelta[3];
+    float vanceDelta[3];
 };
 
 class CommitteePhase {
 public:
-    void Init();
+    void Init(Language lang);
+    GameState Update(SharedMissionData& data);
+    void Draw(const SharedMissionData& data);
     void Unload();
-    GameState Update(SharedMissionData& missionData);
-    void Draw(const SharedMissionData& missionData) const;
 
 private:
-    enum class Stage {
-        INTRO,
-        MODE_SELECT,
-        PITCH_INTRO,
-        PITCH_INPUT,
-        PITCH_REACT,
-        ROUND_INTRO,
-        JUDGE_ASK,
-        JUDGE_ANSWER,
-        JUDGE_REACT,
-        VERDICT_INTRO,
-        VERDICT_VOTES,
-        VERDICT_FINAL
-    };
+    Texture2D texBg{};
+    Texture2D texDesk{};
+    Texture2D texHero{};
+    Texture2D texGrey{};
+    Texture2D texBlue{};
+    Texture2D texSlick{};
+    bool texturesLoaded = false;
 
-    Stage stage = Stage::INTRO;
-    bool writeMode = false;
+    // 0 = intro, 1..8 = preguntas, 9 = deliberacion jueces, 10 = revelacion epica presupuesto
+    int step = 0;
+    int deliberationLine = 0;
+    float epicRevealTimer = 0.0f;
+    float displayedBudget = 0.0f;
+
     bool showNasaFacts = false;
+    int nasaFactsPage = 0;
 
-    std::vector<BoardJudge> judges;
-    std::vector<std::string> pitchOptions;
-    std::vector<ShuffledChoice> currentChoices;
+    float trustHale = 0.50f;
+    float trustBrooks = 0.50f;
+    float trustVance = 0.50f;
 
-    int activeSpeakerIdx = -1;
-    int currentJudgeIdx = 0;
-    int reactStepIdx = 0;
+    int lastDeltaHale = 0;
+    int lastDeltaBrooks = 0;
+    int lastDeltaVance = 0;
+    float deltaFlashTimer = 0.0f;
 
-    std::string currentText;
-    float visibleChars = 0.0f;
-    std::string userTypedText;
+    std::string lastFeedbackEs;
+    std::string lastFeedbackEn;
+    float saveNoticeTimer = 0.0f;
 
-    int pendingDeltas[3] = { 0, 0, 0 };
-    std::string pendingReactions[3];
-
-    int totalApprovedMillions = 0;
-    int yesVotesCount = 0;
-
-    Texture2D texBg   = { 0 };
-    Texture2D texDesk = { 0 };
-    Texture2D texHero = { 0 };
-
-    void StartDialogue(int speaker, const std::string& msg);
-    void PrepareShuffledChoices(const std::vector<std::string>& rawOptions);
-    void ApplyMoodDelta(int judgeIdx, int delta);
-    int ScoreFreeText(const BoardJudge& j, const std::string& text) const;
-    std::string GetJudgeReaction(const BoardJudge& j, int delta) const;
-    void EvaluatePitch(const std::string& text, bool pickedBest, bool usedPickMode);
-    void EvaluateJudgeAnswer(int judgeIdx, const std::string& text, bool pickedBest, bool usedPickMode);
-    void ComputeVerdict(SharedMissionData& missionData);
-    void AdvanceStage(SharedMissionData& missionData);
-    void DrawNasaFactsModal() const;
-};  
+    std::vector<CommitteeQuestion> questions;
+};

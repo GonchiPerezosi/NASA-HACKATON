@@ -1,614 +1,868 @@
-#include "comitee.h"
+﻿#include "comitee.h"
+#include "save_manager.h"
 #include <algorithm>
 #include <cmath>
-#include <random>
-#include <cctype>
 
-static void DrawWrappedText(const std::string& text, float x, float y, float maxWidth, int fontSize, Color color) {
-    std::string line;
-    std::string word;
-    float curY = y;
-
-    for (size_t i = 0; i <= text.size(); ++i) {
-        char c = (i < text.size()) ? text[i] : ' ';
-        if (c == '\n') {
-            line += word;
-            DrawText(line.c_str(), static_cast<int>(x), static_cast<int>(curY), fontSize, color);
-            curY += fontSize + 5.0f;
-            line.clear();
-            word.clear();
-        } else if (c == ' ') {
-            std::string test = line + word + " ";
-            if (MeasureText(test.c_str(), fontSize) > static_cast<int>(maxWidth) && !line.empty()) {
-                DrawText(line.c_str(), static_cast<int>(x), static_cast<int>(curY), fontSize, color);
-                curY += fontSize + 5.0f;
-                line = word + " ";
-            } else {
-                line = test;
-            }
-            word.clear();
-        } else {
-            word += c;
-        }
+void CommitteePhase::Init(Language lang) {
+    (void)lang;
+    if (!texturesLoaded) {
+        texBg    = LoadTexture("assets/sprites/bg.png");
+        texDesk  = LoadTexture("assets/sprites/desk.png");
+        texHero  = LoadTexture("assets/sprites/hero.png");
+        texGrey  = LoadTexture("assets/sprites/grey.png");
+        texBlue  = LoadTexture("assets/sprites/blue.png");
+        texSlick = LoadTexture("assets/sprites/slick.png");
+        texturesLoaded = true;
     }
-    if (!line.empty()) {
-        DrawText(line.c_str(), static_cast<int>(x), static_cast<int>(curY), fontSize, color);
-    }
-}
 
-void CommitteePhase::Init() {
-    stage = Stage::INTRO;
-    writeMode = false;
+    step = 0;
+    deliberationLine = 0;
+    epicRevealTimer = 0.0f;
+    displayedBudget = 0.0f;
     showNasaFacts = false;
-    activeSpeakerIdx = -1;
-    currentJudgeIdx = 0;
-    reactStepIdx = 0;
-    totalApprovedMillions = 0;
-    yesVotesCount = 0;
-    userTypedText.clear();
+    nasaFactsPage = 0;
 
-    // Carga de sprites desde assets/sprites/
-    if (texBg.id == 0)   texBg   = LoadTexture("assets/sprites/bg.png");
-    if (texDesk.id == 0) texDesk = LoadTexture("assets/sprites/desk.png");
-    if (texHero.id == 0) texHero = LoadTexture("assets/sprites/hero.png");
+    trustHale = 0.36f;
+    trustBrooks = 0.36f;
+    trustVance = 0.36f;
 
-    // JUEZ 1: SR. HALE (Tesorero - centrado en costes y contratos fijos)
-    BoardJudge hale;
-    hale.id = "hale";
-    hale.name = "SR. HALE";
-    hale.role = "Tesorero";
-    hale.posX = 695.0f;
-    hale.maxContributionMillions = 2000;
-    hale.question = "Dame una cifra exacta: cuanto cuesta esto y que evita que el precio se duplique?";
-    hale.options = {
-        "5.500 millones. El aterrizador va a precio fijo (si cuesta mas, lo paga la empresa) y guardamos 400M de reserva.",
-        "5.500 millones. Pagaremos a los fabricantes lo que cueste la obra para ir rapido y te enviare un informe mensual.",
-        "3.000 millones con cohete incluido. Reutilizaremos piezas viejas de Apolo y otros paises pagaran el resto."
-    };
-    hale.keywords = { "cost", "presupuesto", "barat", "eficien", "reutil", "retorno", "invers", "ahorr", "contrato", "fijo", "dolar", "$", "millon", "billon", "reserva" };
-    hale.reactPositive = "Aja. Por fin cifras realistas y control del gasto. Con eso si puedo trabajar.";
-    hale.reactNeutral  = "Esos numeros son demasiado vagos para soltar miles de millones. Concreta mas.";
-    hale.reactNegative = "Eso es un eslogan, no un presupuesto. Me estas perdiendo.";
-    hale.reactPickGood = "Un contrato a precio fijo con reserva controlada. Eso protege nuestras cuentas.";
-    hale.reactPickBad  = "Dejar costes abiertos o prometer cifras irreales siempre acaba duplicando la factura.";
-    hale.sprite = LoadTexture("assets/sprites/grey.png");
-    hale.fallbackColor = LIGHTGRAY;
+    lastDeltaHale = 0;
+    lastDeltaBrooks = 0;
+    lastDeltaVance = 0;
+    deltaFlashTimer = 0.0f;
 
-    // JUEZ 2: PRESIDENTE BROOKS (Presidente - centrado en beneficio publico, ciencia y empleo)
-    BoardJudge brooks;
-    brooks.id = "brooks";
-    brooks.name = "PRESIDENTE BROOKS";
-    brooks.role = "Presidente";
-    brooks.posX = 900.0f;
-    brooks.maxContributionMillions = 2500;
-    brooks.question = "Que ganan los ciudadanos en la Tierra con esta mision lunar?";
-    brooks.options = {
-        "Nuevos sistemas de reciclaje de agua y energia para zonas secas, miles de empleos y datos abiertos para escuelas.",
-        "Un aterrizaje historico en el polo sur lunar visto por millones y un gran impulso a nuestra imagen internacional.",
-        "Mapas detallados del hielo lunar que nuestros cientificos publicaran para planificar las siguientes misiones."
-    };
-    brooks.keywords = { "ciencia", "descubr", "inspir", "empleo", "trabajo", "estudiant", "educa", "public", "futuro", "humanidad", "tecnolog", "agua", "hielo", "investig", "tierra" };
-    brooks.reactPositive = "Me gusta como suena. Eso si podemos explicarselo con orgullo a los contribuyentes.";
-    brooks.reactNeutral  = "La gente necesita ver un beneficio claro aqui en la Tierra, no solo banderas.";
-    brooks.reactNegative = "Con ese discurso el Congreso nos recortara los fondos manana mismo.";
-    brooks.reactPickGood = "Tecnologia util para la Tierra, empleo y ciencia abierta. Gran argumento.";
-    brooks.reactPickBad  = "El prestigio por si solo no basta para justificar esta inversion ante el pais.";
-    brooks.sprite = LoadTexture("assets/sprites/blue.png");
-    brooks.fallbackColor = SKYBLUE;
+    lastFeedbackEs.clear();
+    lastFeedbackEn.clear();
+    saveNoticeTimer = 0.0f;
 
-    // JUEZ 3: DRA. VANCE (Ingeniera Jefe - centrada en seguridad, margenes y respaldo)
-    BoardJudge vance;
-    vance.id = "vance";
-    vance.name = "DRA. VANCE";
-    vance.role = "Ingeniera Jefe";
-    vance.posX = 1090.0f;
-    vance.maxContributionMillions = 2000;
-    vance.question = "Algo fallara camino a la Luna. Cual es vuestro plan de respaldo?";
-    vance.options = {
-        "Cada sistema vital tiene repuesto, llevamos 20% extra de agua y aire, y si falla el modulo vuelven en la capsula.",
-        "Usamos la tecnologia mas moderna y probamos cada pieza dos veces antes del despegue para evitar fallos.",
-        "Control de mision vigila la nave 24 horas y la tripulacion entrena meses para reparar cualquier averia."
-    };
-    vance.keywords = { "segur", "riesgo", "prueba", "respaldo", "redundan", "margen", "tripulacion", "abort", "fiab", "radiacion", "oxigeno", "combustible", "repuesto", "aire" };
-    vance.reactPositive = "Bien pensado. Veo margenes de seguridad realistas y redundancia tecnica.";
-    vance.reactNeutral  = "En el espacio todo lo que puede fallar, falla. Necesito mas margen de seguridad.";
-    vance.reactNegative = "No pienso firmar el lanzamiento de una tripulacion con ese nivel de riesgo.";
-    vance.reactPickGood = "Redundancia, margen del 20% y plan de aborto claro. Ingenieria solida.";
-    vance.reactPickBad  = "Confiar en que nada fallara no es un plan de ingenieria aceptable.";
-    vance.sprite = LoadTexture("assets/sprites/slick.png");
-    vance.fallbackColor = ORANGE;
-
-    judges = { hale, brooks, vance };
-
-    // Propuestas iniciales (el indice 0 es la mas solida)
-    pitchOptions = {
-        "4 astronautas exploraran el polo sur lunar buscando hielo. Pedimos 5.500M$: 4.100M$ cohete y capsula, 1.000M$ modulo lunar y 400M$ de reserva.",
-        "4 astronautas iran al polo sur lunar buscando hielo. Solo necesitamos 900M$ porque reutilizaremos piezas viejas y compartiremos gastos.",
-        "4 astronautas iran al polo sur lunar, montaran una base y probaran un rover de Marte por 5.500M$, pagando lo que cueste la obra."
-    };
-
-    StartDialogue(-1, "FASE 1 - AUDIENCIA DE PRESUPUESTO\nEres el economista de la mision. Convence al comite para financiar el viaje tripulado a la Luna.\nConsejo: Pulsa DATOS NASA (arriba a la izquierda) para consultar costes reales de auditoria.");
-}
-
-void CommitteePhase::Unload() {
-    if (texBg.id > 0)   UnloadTexture(texBg);
-    if (texDesk.id > 0) UnloadTexture(texDesk);
-    if (texHero.id > 0) UnloadTexture(texHero);
-    for (auto& j : judges) {
-        if (j.sprite.id > 0) UnloadTexture(j.sprite);
-    }
-}
-
-void CommitteePhase::StartDialogue(int speaker, const std::string& msg) {
-    activeSpeakerIdx = speaker;
-    currentText = msg;
-    visibleChars = 0.0f;
-}
-
-void CommitteePhase::PrepareShuffledChoices(const std::vector<std::string>& rawOptions) {
-    currentChoices.clear();
-    for (size_t i = 0; i < rawOptions.size(); ++i) {
-        currentChoices.push_back({ rawOptions[i], i == 0 });
-    }
-    static std::mt19937 rng(std::random_device{}());
-    std::shuffle(currentChoices.begin(), currentChoices.end(), rng);
-}
-
-void CommitteePhase::ApplyMoodDelta(int judgeIdx, int delta) {
-    judges[judgeIdx].mood = std::clamp(judges[judgeIdx].mood + delta, 0, 100);
-    judges[judgeIdx].lastDelta = delta;
-    judges[judgeIdx].popTimer = 1.5f;
-}
-
-int CommitteePhase::ScoreFreeText(const BoardJudge& j, const std::string& text) const {
-    std::string lower = text;
-    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return std::tolower(c); });
-
-    int hits = 0;
-    for (const auto& k : j.keywords) {
-        if (lower.find(k) != std::string::npos) hits++;
-    }
-    bool hasDigit = std::any_of(lower.begin(), lower.end(), ::isdigit);
-    int delta = -10 + std::min(hits, 5) * 6 + (text.size() > 140 ? 4 : (text.size() < 45 ? -6 : 0)) + (hasDigit ? 4 : 0);
-    return std::clamp(delta, -18, 20);
-}
-
-std::string CommitteePhase::GetJudgeReaction(const BoardJudge& j, int delta) const {
-    if (delta > 6)  return j.reactPositive;
-    if (delta < -3) return j.reactNegative;
-    return j.reactNeutral;
-}
-
-void CommitteePhase::EvaluatePitch(const std::string& text, bool pickedBest, bool usedPickMode) {
-    for (int i = 0; i < 3; ++i) {
-        int d = ScoreFreeText(judges[i], text);
-        if (usedPickMode) {
-            d = pickedBest ? std::max(d, 12) : std::min(d, 4);
+    questions = {
+        // 1 -> B
+        {
+            "1/12 · LÍNEA BASE FISCAL", "1/12 · FISCAL BASELINE",
+            "SR. HALE (Subcomité de Asignaciones)", "MR. HALE (Appropriations Chair)",
+            "El Congreso auditó sobrecostes previos. ¿Qué marco presupuestario plurianual solicita para garantizar el alunizaje?",
+            "Congress audited prior overruns. What multi-year budget baseline do you request to guarantee a lunar landing?",
+            {
+                "A) $280.000M en cheque en blanco sin techo de gasto",
+                "B) $93.000M auditados por hitos con reserva de contingencia del 15%",
+                "C) $14.000M eliminando pruebas estáticas de motores en tierra"
+            },
+            {
+                "A) $280B blank check with no spending cap",
+                "B) $93B milestone-audited baseline with 15% contingency reserve",
+                "C) $14B by eliminating ground static-fire engine tests"
+            },
+            {
+                "Sr. Hale rechaza de plano un cheque sin auditoría ni techo fiscal.",
+                "Sr. Hale asiente: una línea base realista auditada por hitos evita desvíos.",
+                "Dra. Vance protesta: recortar pruebas en tierra multiplica el riesgo de explosión."
+            },
+            {
+                "Mr. Hale flatly rejects an unaudited blank check.",
+                "Mr. Hale nods: a realistic milestone-audited baseline prevents overruns.",
+                "Dr. Vance objects: cutting ground tests multiplies explosion risk."
+            },
+            { -0.20f,  0.09f,  0.03f },
+            { -0.14f,  0.07f, -0.14f },
+            {  0.02f,  0.06f, -0.22f }
+        },
+        // 2 -> C
+        {
+            "2/12 · ARQUITECTURA ORBITAL", "2/12 · MISSION ARCHITECTURE",
+            "DRA. VANCE (Ingeniera Jefe de Sistemas)", "DR. VANCE (Chief Systems Engineer)",
+            "¿Qué perfil orbital emplearemos para minimizar la masa total que debe despegar desde Cabo Cañaveral?",
+            "Which orbital flight profile will we use to minimize total launch mass from Cape Canaveral?",
+            {
+                "A) Ascenso Directo aterrizando todo el cohete superior en la Luna",
+                "B) 14 lanzamientos independientes sin acoplamiento automatizado",
+                "C) Encuentro en Órbita Lunar (LOR) con módulo de descenso dedicado"
+            },
+            {
+                "A) Direct Ascent landing the entire upper rocket on the Moon",
+                "B) 14 separate launches with no automated orbital docking",
+                "C) Lunar Orbit Rendezvous (LOR) with dedicated lightweight lander"
+            },
+            {
+                "Dra. Vance señala que el Ascenso Directo exige un supercohete inviable.",
+                "Sr. Hale advierte que 14 lanzamientos disparan el coste operativo.",
+                "Dra. Vance aprueba: LOR ahorra decenas de toneladas de propelente."
+            },
+            {
+                "Dr. Vance notes Direct Ascent requires an unbuildable super-booster.",
+                "Mr. Hale warns that 14 launches blow up operational costs.",
+                "Dr. Vance approves: LOR saves dozens of tons of return propellant."
+            },
+            { -0.12f, -0.18f,  0.07f },
+            { -0.08f, -0.14f,  0.06f },
+            { -0.18f, -0.15f,  0.10f }
+        },
+        // 3 -> A
+        {
+            "3/12 · DINÁMICA DE DESPEGUE", "3/12 · LIFTOFF DYNAMICS",
+            "DRA. VANCE (Ingeniera Jefe de Sistemas)", "DR. VANCE (Chief Systems Engineer)",
+            "Con miles de toneladas en rampa, ¿qué relación Empuje-Peso (TWR) mínima exigirá al encender motores?",
+            "With thousands of tons on the pad, what minimum Thrust-to-Weight Ratio (TWR) will you require at ignition?",
+            {
+                "A) TWR > 1,20 (como el 1,22 del Saturno V) para vencer pérdidas gravitatorias",
+                "B) TWR = 1,00 exacto para estabilizar el cohete flotando antes de subir",
+                "C) TWR = 0,85 para quemar combustible despacio y reducir presión"
+            },
+            {
+                "A) TWR > 1.20 (like Saturn V's 1.22) to overcome gravity drag",
+                "B) TWR = 1.00 exact so the rocket hovers before climbing",
+                "C) TWR = 0.85 to burn fuel slowly and reduce dynamic pressure"
+            },
+            {
+                "Dra. Vance valida el margen: superar 1,20 garantiza ascenso vertical limpio.",
+                "Flotar a TWR 1,00 quema toneladas de propelente sin ganar un metro de altura.",
+                "Con TWR < 1 el cohete ni siquiera se despegará de la plataforma."
+            },
+            {
+                "Dr. Vance validates the margin: exceeding 1.20 ensures clean vertical climb.",
+                "Hovering at TWR 1.00 wastes tons of propellant with zero altitude gain.",
+                "With TWR < 1 the rocket won't even lift off the pad."
+            },
+            {  0.05f, -0.10f, -0.12f },
+            {  0.05f, -0.08f, -0.10f },
+            {  0.10f, -0.18f, -0.22f }
+        },
+        // 4 -> B
+        {
+            "4/12 · ECUACIÓN DE TSIOLKOVSKY", "4/12 · ROCKET EQUATION",
+            "SR. HALE (Subcomité de Asignaciones)", "MR. HALE (Appropriations Chair)",
+            "El Senado pregunta por qué los tanques ocupan casi toda la nave. ¿Qué fracción de masa en rampa es propelente?",
+            "The Senate asks why tanks occupy nearly the entire vehicle. What pad mass fraction is propellant?",
+            {
+                "A) Un 40% de combustible y el 60% de blindaje estructural reforzado",
+                "B) Entre el 85% y el 90% de la masa total (ley exponencial Delta-V)",
+                "C) Menos del 20% gracias a la conservación del momento en el vacío"
+            },
+            {
+                "A) 40% fuel and 60% heavy reinforced structural armor",
+                "B) Between 85% and 90% of total pad mass (exponential Delta-V law)",
+                "C) Under 20% thanks to momentum conservation in vacuum"
+            },
+            {
+                "Dra. Vance corrige: con un 40% de propelente ni siquiera alcanzaríamos órbita baja.",
+                "Sr. Hale entiende la física: lograr ~15 km/s de Delta-V exige esa ratio.",
+                "El comité detecta que esa cifra viola la ecuación del cohete."
+            },
+            {
+                "Dr. Vance corrects: 40% propellant wouldn't even reach Low Earth Orbit.",
+                "Mr. Hale grasps the physics: reaching ~15 km/s Delta-V demands that ratio.",
+                "The committee notes that figure violates the rocket equation."
+            },
+            { -0.14f,  0.09f, -0.16f },
+            { -0.10f,  0.06f, -0.14f },
+            { -0.18f,  0.08f, -0.20f }
+        },
+        // 5 -> C
+        {
+            "5/12 · PROPULSIÓN CRIOGÉNICA", "5/12 · CRYOGENIC PROPULSION",
+            "DRA. VANCE (Ingeniera Jefe de Sistemas)", "DR. VANCE (Chief Systems Engineer)",
+            "¿Cómo combinará propelentes entre la primera etapa y las etapas superiores translunares?",
+            "How will you combine propellants between the first stage and upper translunar stages?",
+            {
+                "A) Queroseno RP-1 en todas las etapas por su mayor impulso específico",
+                "B) Combustible sólido monolítico en la etapa de inyección translunar",
+                "C) RP-1/LOX en 1ª etapa por empuje y LH2/LOX arriba por alto Isp (~450s)"
+            },
+            {
+                "A) RP-1 kerosene across all stages for higher specific impulse",
+                "B) Monolithic solid propellant for the translunar injection stage",
+                "C) RP-1/LOX on Stage 1 for thrust & LH2/LOX upper stages for high Isp"
+            },
+            {
+                "Dra. Vance corrige: el hidrógeno líquido tiene mucho mayor Isp que el RP-1.",
+                "Los motores sólidos no pueden reencenderse ni modularse con precisión orbital.",
+                "Dra. Vance asiente: densidad abajo y máxima eficiencia criogénica arriba."
+            },
+            {
+                "Dr. Vance corrects: liquid hydrogen has far higher Isp than RP-1 kerosene.",
+                "Solid motors cannot be restarted or throttled for precise orbital burns.",
+                "Dr. Vance nods: high density at liftoff and peak cryogenic Isp upstairs."
+            },
+            { -0.06f, -0.08f,  0.06f },
+            { -0.05f, -0.12f,  0.06f },
+            { -0.16f, -0.18f,  0.10f }
+        },
+        // 6 -> A
+        {
+            "6/12 · SEGURIDAD DE TRIPULACIÓN", "6/12 · CREW SAFETY & ABORT",
+            "PRESIDENTE BROOKS (Comité Espacial)", "CHAIRMAN BROOKS (Space Committee)",
+            "Tras Apolo 1 y Challenger, ¿cómo garantizamos la supervivencia ante una anomalía crítica durante el ascenso?",
+            "After Apollo 1 and Challenger, how do we ensure crew survival during a critical launch anomaly?",
+            {
+                "A) Torre de Escape (LES) sólida y modos de aborto intacto a órbita",
+                "B) Eliminar la torre de escape para ahorrar 4,2 toneladas de masa seca",
+                "C) Paracaídas individuales con apertura manual durante el ascenso"
+            },
+            {
+                "A) Solid-rocket Launch Escape System (LES) and abort-to-orbit modes",
+                "B) Remove the escape tower to save 4.2 tons of dry mass",
+                "C) Individual parachutes with manual hatch exit during ascent"
+            },
+            {
+                "Presidente Brooks respalda la seguridad tripulada como prioridad absoluta.",
+                "Presidente Brooks rechaza recortar sistemas de salvamento tripulado.",
+                "Dra. Vance señala que es imposible abrir escotillas en vuelo supersónico."
+            },
+            {
+                "Chairman Brooks backs crew safety as an absolute non-negotiable priority.",
+                "Chairman Brooks refuses to cut crew escape systems.",
+                "Dr. Vance notes hatches cannot be opened during supersonic flight."
+            },
+            {  0.05f,  0.04f, -0.10f },
+            {  0.10f, -0.22f, -0.20f },
+            {  0.07f, -0.16f, -0.20f }
+        },
+        // 7 -> C
+        {
+            "7/12 · INYECCIÓN TRANSLUNAR", "7/12 · TRANSLUNAR INJECTION",
+            "DRA. VANCE (Ingeniera Jefe de Sistemas)", "DR. VANCE (Chief Systems Engineer)",
+            "Al encender la etapa TLI desde órbita terrestre, ¿hacia dónde apuntaremos el vector de velocidad?",
+            "When firing the TLI stage from Earth orbit, where do we aim our velocity vector?",
+            {
+                "A) En línea recta hacia la posición actual donde vemos la Luna",
+                "B) Rasante sobre la atmósfera lunar para frenar por rozamiento sin fuel",
+                "C) Trayectoria de regreso libre apuntando 3 días por delante de la Luna"
+            },
+            {
+                "A) Straight line directly at the Moon's current visible position",
+                "B) Grazing the lunar atmosphere to aerocapture without propellant",
+                "C) Free-return trajectory aimed 3 days ahead of the Moon's orbit"
+            },
+            {
+                "En los 3 días de viaje la Luna se habrá desplazado miles de kilómetros.",
+                "La Luna carece de atmósfera densa para frenar una nave a 2,4 km/s.",
+                "Dra. Vance aprueba: interceptación precisa y retorno seguro si falla el motor."
+            },
+            {
+                "Over the 3-day transit the Moon moves thousands of kilometers in orbit.",
+                "The Moon lacks a dense atmosphere to aerocapture a craft at 2.4 km/s.",
+                "Dr. Vance approves: accurate intercept plus safe Earth return if engines fail."
+            },
+            { -0.08f, -0.06f,  0.06f },
+            { -0.08f, -0.08f,  0.08f },
+            { -0.20f, -0.22f,  0.10f }
+        },
+        // 8 -> B
+        {
+            "8/12 · REENTRADA A 11 KM/S", "8/12 · 11 KM/S LUNAR REENTRY",
+            "DRA. VANCE (Ingeniera Jefe de Sistemas)", "DR. VANCE (Chief Systems Engineer)",
+            "Regresar de la Luna implica entrar en la atmósfera a ~11 km/s (4x la energía cinética de LEO). ¿Qué solución propone?",
+            "Lunar return hits Earth's atmosphere at ~11 km/s (4x LEO kinetic energy). What thermal protection do you propose?",
+            {
+                "A) Losetas cerámicas finas diseñadas para órbita terrestre baja",
+                "B) Escudo térmico ablativo fenólico y reentrada guiada de doble salto",
+                "C) Frenar toda la velocidad orbital con retropropulsión antes de tocar aire"
+            },
+            {
+                "A) Thin ceramic tiles rated for Low Earth Orbit shuttle reentry",
+                "B) Phenolic ablative heat shield with guided skip-reentry profile",
+                "C) Cancel all orbital velocity with retro-propulsion before hitting air"
+            },
+            {
+                "Dra. Vance advierte que las losetas de LEO se fundirían a 11 km/s.",
+                "Dra. Vance valida: la ablación disipa miles de grados y controla las fuerzas G.",
+                "Frenar con motores exigiría llevar otro cohete entero hasta la Luna."
+            },
+            {
+                "Dr. Vance warns LEO ceramic tiles would melt at 11 km/s reentry.",
+                "Dr. Vance validates: ablation dissipates extreme heat and limits G-loads.",
+                "Propulsive braking would require carrying another entire rocket to the Moon."
+            },
+            { -0.08f,  0.06f, -0.16f },
+            { -0.14f,  0.07f, -0.10f },
+            { -0.20f,  0.10f, -0.18f }
+        },
+        // 9 -> B
+        {
+            "9/12 · RADIACIÓN ESPACIO PROFUNDO", "9/12 · DEEP SPACE RADIATION",
+            "PRESIDENTE BROOKS (Comité Espacial)", "CHAIRMAN BROOKS (Space Committee)",
+            "Fuera del campo magnético terrestre, una tormenta solar es letal. ¿Cómo protegeremos tripulación y aviónica?",
+            "Outside Earth's magnetic field, a solar storm is lethal. How will we protect crew and avionics?",
+            {
+                "A) Blindaje macizo de plomo de 15 cm alrededor de toda la cápsula",
+                "B) Refugio rodeado de tanques de agua/víveres y ordenadores triples (TMR)",
+                "C) Apagar toda la telemetría y sensores durante el cruce de Van Allen"
+            },
+            {
+                "A) Solid 15 cm lead armor plating wrapped around the entire capsule",
+                "B) Storm shelter buffered by water/provisions & triple-redundant computers",
+                "C) Shut down all telemetry and sensors while crossing Van Allen belts"
+            },
+            {
+                "El plomo añade toneladas prohibitivas y genera radiación secundaria.",
+                "El comité elogia usar el agua potable como escudo y triple redundancia.",
+                "Volar a ciegas sin navegación inercial ni telemetría es inaceptable."
+            },
+            {
+                "Lead adds prohibitive mass and produces secondary bremsstrahlung radiation.",
+                "The committee praises water shielding and triple-modular redundancy.",
+                "Flying blind without inertial navigation or telemetry is unacceptable."
+            },
+            { -0.18f,  0.07f, -0.08f },
+            { -0.06f,  0.10f, -0.18f },
+            { -0.16f,  0.08f, -0.18f }
+        },
+        // 10 -> A
+        {
+            "10/12 · CONTROL DE CONTRATISTAS", "10/12 · CONTRACTOR GOVERNANCE",
+            "SR. HALE (Subcomité de Asignaciones)", "MR. HALE (Appropriations Chair)",
+            "¿Qué modelo contractual aplicará a los proveedores aeroespaciales para evitar retrasos multimillonarios?",
+            "What contracting model will you enforce on aerospace suppliers to prevent multi-billion-dollar delays?",
+            {
+                "A) Contratos de precio fijo por hitos verificables y auditoría abierta",
+                "B) Adjudicación directa sin penalizaciones por retrasos de entrega",
+                "C) Rediseñar los motores principales después de fabricar los tanques"
+            },
+            {
+                "A) Firm-fixed-price milestone contracts with open-book audits",
+                "B) Sole-source awards with zero penalties for schedule slips",
+                "C) Redesign main engines after structural tanks are already welded"
+            },
+            {
+                "Sr. Hale celebra la disciplina financiera: solo se paga tras superar pruebas.",
+                "Sr. Hale rechaza pagar sobrecostes ilimitados sin responsabilidad.",
+                "Cambiar motores tarde destruye la integración estructural y el presupuesto."
+            },
+            {
+                "Mr. Hale applauds financial discipline: payment only upon verified tests.",
+                "Mr. Hale refuses to fund unlimited cost-plus overruns with zero accountability.",
+                "Late engine redesigns wreck structural integration and budgets."
+            },
+            {  0.10f, -0.22f, -0.18f },
+            {  0.07f, -0.14f, -0.12f },
+            {  0.05f, -0.08f, -0.18f }
+        },
+        // 11 -> C
+        {
+            "11/12 · DESCENSO EN POLO SUR", "11/12 · SOUTH POLE LANDING",
+            "PRESIDENTE BROOKS (Comité Espacial)", "CHAIRMAN BROOKS (Space Committee)",
+            "El polo sur lunar tiene cráteres escarpados y sombras largas. ¿Cómo garantizamos un alunizaje seguro?",
+            "The lunar South Pole has steep craters and long shadows. How do we ensure a safe touchdown?",
+            {
+                "A) Descenso cronometrado a ciegas sin radar Doppler de superficie",
+                "B) Aterrizar en el ecuador lunar ignorando los depósitos de hielo",
+                "C) Navegación óptica por terreno (TRN) con LIDAR hacia cráteres polares"
+            },
+            {
+                "A) Timed blind descent with no surface Doppler radar",
+                "B) Land on the lunar equator ignoring polar water-ice deposits",
+                "C) Terrain Relative Navigation (TRN) with LIDAR targeting polar rims"
+            },
+            {
+                "Aterrizar sin radar ni evasión de rocas acabaría volcando el módulo.",
+                "Abandonar el polo sur renuncia al hielo de agua clave para futuras bases.",
+                "El comité valida el sistema LIDAR autónomo para evitar rocas y pendientes."
+            },
+            {
+                "Landing without radar or hazard avoidance risks tipping the lander.",
+                "Abandoning the South Pole forfeits water ice vital for sustained bases.",
+                "The committee validates autonomous LIDAR hazard avoidance."
+            },
+            { -0.10f, -0.06f,  0.06f },
+            { -0.20f, -0.15f,  0.10f },
+            { -0.22f, -0.08f,  0.09f }
+        },
+        // 12 -> B
+        {
+            "12/12 · RETORNO CIENTÍFICO Y ROI", "12/12 · SCIENCE RETURN & ROI",
+            "PRESIDENTE BROOKS & SR. HALE", "CHAIRMAN BROOKS & MR. HALE",
+            "Última cuestión antes de votar: ¿qué retorno tangible justificará esta inversión ante la ciencia y el Senado?",
+            "Final question before the vote: what tangible return justifies this investment to scientists and the Senate?",
+            {
+                "A) No embarcar instrumentos científicos para reducir peso y coste",
+                "B) Retorno de muestras criogénicas, sismómetros y retrorreflectores láser",
+                "C) Plantar una bandera y despegar en 10 minutos sin recoger regolito"
+            },
+            {
+                "A) Exclude all scientific instruments to save mass and cost",
+                "B) Cryogenic sample return, seismometers, and laser retroreflectors",
+                "C) Plant a flag and depart in 10 minutes without collecting regolith"
+            },
+            {
+                "Sr. Hale recuerda que sin retorno científico el Senado vetará los fondos.",
+                "Impresión final sólida: ciencia de alto valor y liderazgo tecnológico.",
+                "El comité considera insuficiente un viaje sin instrumentación científica."
+            },
+            {
+                "Mr. Hale notes that without science return the Senate will veto funding.",
+                "Strong closing impression: high-value science and technological leadership.",
+                "The committee deems a flight with zero scientific instruments insufficient."
+            },
+            { -0.12f,  0.09f, -0.10f },
+            { -0.18f,  0.10f, -0.16f },
+            { -0.14f,  0.08f, -0.12f }
         }
-        pendingDeltas[i] = d;
-        pendingReactions[i] = GetJudgeReaction(judges[i], d);
-    }
+    };
 }
 
-void CommitteePhase::EvaluateJudgeAnswer(int judgeIdx, const std::string& text, bool pickedBest, bool usedPickMode) {
-    int d = ScoreFreeText(judges[judgeIdx], text);
-    if (usedPickMode) {
-        d = pickedBest ? std::max(d, 20) : std::min(d, 6);
-    }
-    pendingDeltas[judgeIdx] = d;
-    if (usedPickMode && pickedBest) {
-        pendingReactions[judgeIdx] = judges[judgeIdx].reactPickGood;
-    } else if (usedPickMode) {
-        pendingReactions[judgeIdx] = judges[judgeIdx].reactPickBad;
-    } else {
-        pendingReactions[judgeIdx] = GetJudgeReaction(judges[judgeIdx], d);
-    }
-}
-
-void CommitteePhase::ComputeVerdict(SharedMissionData& missionData) {
-    totalApprovedMillions = 0;
-    yesVotesCount = 0;
-
-    for (auto& j : judges) {
-        if (j.mood >= 40) {
-            float raw = (static_cast<float>(j.maxContributionMillions) * j.mood) / 100.0f;
-            int pledge = static_cast<int>(std::round(raw / 50.0f)) * 50;
-            j.pledgedMillions = pledge;
-            totalApprovedMillions += pledge;
-            yesVotesCount++;
-        } else {
-            j.pledgedMillions = 0;
-        }
-    }
-
-    if (yesVotesCount >= 2) {
-        missionData.awardedBudget = static_cast<float>(totalApprovedMillions);
-        missionData.remainingBudget = missionData.awardedBudget;
-    }
-}
-
-void CommitteePhase::AdvanceStage(SharedMissionData& missionData) {
-    switch (stage) {
-        case Stage::INTRO:
-            stage = Stage::MODE_SELECT;
-            StartDialogue(-1, "Como quieres responder al comite?\n[1] ELEGIR ENTRE 3: Selecciona una de las tres respuestas preparadas.\n[2] ESCRIBIR YO MISMO: Redacta tus propios argumentos y cifras.");
-            break;
-
-        case Stage::PITCH_INTRO:
-            stage = Stage::PITCH_INPUT;
-            userTypedText.clear();
-            if (!writeMode) {
-                PrepareShuffledChoices(pitchOptions);
-                StartDialogue(-2, "Elige tu propuesta inicial para el Comite de la NASA:");
-            } else {
-                StartDialogue(-2, "Escribe tu propuesta inicial (objetivo, coste en millones y seguridad):");
-            }
-            break;
-
-        case Stage::PITCH_REACT:
-            if (reactStepIdx < 3) {
-                ApplyMoodDelta(reactStepIdx, pendingDeltas[reactStepIdx]);
-                StartDialogue(reactStepIdx, pendingReactions[reactStepIdx]);
-                reactStepIdx++;
-            } else {
-                stage = Stage::ROUND_INTRO;
-                StartDialogue(-1, "Ronda de preguntas. Cada miembro del comite te hara una pregunta clave para decidir su voto.");
-            }
-            break;
-
-        case Stage::ROUND_INTRO:
-            currentJudgeIdx = 0;
-            stage = Stage::JUDGE_ASK;
-            StartDialogue(currentJudgeIdx, judges[currentJudgeIdx].question);
-            break;
-
-        case Stage::JUDGE_ASK:
-            stage = Stage::JUDGE_ANSWER;
-            userTypedText.clear();
-            if (!writeMode) {
-                PrepareShuffledChoices(judges[currentJudgeIdx].options);
-                StartDialogue(-2, "Elige tu respuesta para " + judges[currentJudgeIdx].name + ":");
-            } else {
-                StartDialogue(-2, "Escribe tu respuesta para " + judges[currentJudgeIdx].name + ":");
-            }
-            break;
-
-        case Stage::JUDGE_REACT:
-            currentJudgeIdx++;
-            if (currentJudgeIdx < 3) {
-                stage = Stage::JUDGE_ASK;
-                StartDialogue(currentJudgeIdx, judges[currentJudgeIdx].question);
-            } else {
-                stage = Stage::VERDICT_INTRO;
-                StartDialogue(-1, "El comite procede a votar. Quien tenga menos de 40 de aprobacion no aporta fondos. Necesitas al menos 2 votos a favor.");
-            }
-            break;
-
-        case Stage::VERDICT_INTRO:
-            ComputeVerdict(missionData);
-            reactStepIdx = 0;
-            stage = Stage::VERDICT_VOTES;
-            AdvanceStage(missionData);
-            break;
-
-        case Stage::VERDICT_VOTES:
-            if (reactStepIdx < 3) {
-                const auto& j = judges[reactStepIdx];
-                if (j.pledgedMillions > 0) {
-                    StartDialogue(reactStepIdx, TextFormat("Aprobacion %d/100. Voto SI y aporto $%d millones ($%.2f B).", j.mood, j.pledgedMillions, j.pledgedMillions / 1000.0f));
-                } else {
-                    StartDialogue(reactStepIdx, TextFormat("Aprobacion %d/100. No me has convencido. Voto NO.", j.mood));
-                }
-                reactStepIdx++;
-            } else {
-                stage = Stage::VERDICT_FINAL;
-                if (yesVotesCount >= 2) {
-                    StartDialogue(1, TextFormat("MISION APROBADA: $%.2f BILLONES! Pasa al Laboratorio para comprar las piezas y ensamblar tu cohete.", totalApprovedMillions / 1000.0f));
-                } else {
-                    StartDialogue(1, "MISION RECHAZADA: No lograste al menos 2 votos a favor. Mejora tus cifras y vuelve a intentarlo.");
-                }
-            }
-            break;
-
-        default:
-            break;
-    }
-}
-
-GameState CommitteePhase::Update(SharedMissionData& missionData) {
+GameState CommitteePhase::Update(SharedMissionData& data) {
+    Vector2 mouse = GetMousePosition();
     float dt = GetFrameTime();
 
-    if (visibleChars < static_cast<float>(currentText.size())) {
-        visibleChars = std::min(static_cast<float>(currentText.size()), visibleChars + 95.0f * dt);
+    if (saveNoticeTimer > 0.0f) saveNoticeTimer = std::max(0.0f, saveNoticeTimer - dt);
+    if (deltaFlashTimer > 0.0f) deltaFlashTimer = std::max(0.0f, deltaFlashTimer - dt);
+
+    int totalQ = static_cast<int>(questions.size());
+    int delibStep = totalQ + 1;
+    int revealStep = totalQ + 2;
+
+    if (step == revealStep) {
+        epicRevealTimer += dt;
+        float progress = std::clamp(epicRevealTimer / 1.8f, 0.0f, 1.0f);
+        float eased = 1.0f - std::pow(1.0f - progress, 3.0f);
+        displayedBudget = data.awardedBudget * eased;
     }
 
-    for (auto& j : judges) {
-        if (j.popTimer > 0.0f) j.popTimer = std::max(0.0f, j.popTimer - dt);
-    }
+    Rectangle btnMenu  = { 24.0f, 14.0f, 105.0f, 32.0f };
+    Rectangle btnSave  = { 138.0f, 14.0f, 125.0f, 32.0f };
+    Rectangle btnFacts = { 330.0f, 66.0f, 142.0f, 34.0f };
 
-    Vector2 mousePos = GetMousePosition();
+    if (IsKeyPressed(KEY_M)) return GameState::MENU;
 
-    Rectangle factBtn = { 330.0f, 34.0f, 125.0f, 34.0f };
-    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && CheckCollisionPointRec(mousePos, factBtn)) {
-        showNasaFacts = !showNasaFacts;
-        return GameState::COMMITTEE;
-    }
-
-    if (showNasaFacts) {
-        Rectangle closeFactBtn = { SCREEN_WIDTH - 235.0f, SCREEN_HEIGHT - 105.0f, 155.0f, 42.0f };
-        if ((IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && CheckCollisionPointRec(mousePos, closeFactBtn)) || IsKeyPressed(KEY_ESCAPE)) {
-            showNasaFacts = false;
+    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+        if (CheckCollisionPointRec(mouse, btnMenu)) {
+            return GameState::MENU;
         }
-        return GameState::COMMITTEE;
-    }
-
-    if (stage == Stage::MODE_SELECT) {
-        Rectangle btnPick  = { 735.0f, 645.0f, 245.0f, 44.0f };
-        Rectangle btnWrite = { 1000.0f, 645.0f, 240.0f, 44.0f };
-
-        if ((IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && CheckCollisionPointRec(mousePos, btnPick)) || IsKeyPressed(KEY_ONE)) {
-            writeMode = false;
-            stage = Stage::PITCH_INTRO;
-            StartDialogue(1, "Tienes la palabra. Explicanos en que consiste esta mision y por que debemos financiarla.");
-        } else if ((IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && CheckCollisionPointRec(mousePos, btnWrite)) || IsKeyPressed(KEY_TWO)) {
-            writeMode = true;
-            stage = Stage::PITCH_INTRO;
-            StartDialogue(1, "Tienes la palabra. Explicanos en que consiste esta mision y por que debemos financiarla.");
+        if (CheckCollisionPointRec(mouse, btnSave)) {
+            SaveManager::SaveGame(data.activeSaveSlot, data, GameState::COMMITTEE);
+            saveNoticeTimer = 2.0f;
+            return GameState::COMMITTEE;
         }
-        return GameState::COMMITTEE;
-    }
+        if (CheckCollisionPointRec(mouse, btnFacts)) {
+            showNasaFacts = !showNasaFacts;
+            return GameState::COMMITTEE;
+        }
 
-    if (!writeMode && (stage == Stage::PITCH_INPUT || stage == Stage::JUDGE_ANSWER)) {
-        for (size_t i = 0; i < currentChoices.size(); ++i) {
-            Rectangle optRect = { 260.0f, 295.0f + i * 74.0f, 985.0f, 64.0f };
-            bool clicked = IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && CheckCollisionPointRec(mousePos, optRect);
-            bool keyHit = (i == 0 && IsKeyPressed(KEY_ONE)) || (i == 1 && IsKeyPressed(KEY_TWO)) || (i == 2 && IsKeyPressed(KEY_THREE));
+        if (showNasaFacts) {
+            Rectangle btnPrevPage = { 250.0f, 470.0f, 160.0f, 36.0f };
+            Rectangle btnNextPage = { 425.0f, 470.0f, 160.0f, 36.0f };
+            Rectangle btnClose    = { 880.0f, 470.0f, 150.0f, 36.0f };
 
-            if (clicked || keyHit) {
-                if (stage == Stage::PITCH_INPUT) {
-                    EvaluatePitch(currentChoices[i].text, currentChoices[i].isBest, true);
-                    reactStepIdx = 0;
-                    stage = Stage::PITCH_REACT;
-                    AdvanceStage(missionData);
-                } else {
-                    EvaluateJudgeAnswer(currentJudgeIdx, currentChoices[i].text, currentChoices[i].isBest, true);
-                    ApplyMoodDelta(currentJudgeIdx, pendingDeltas[currentJudgeIdx]);
-                    stage = Stage::JUDGE_REACT;
-                    StartDialogue(currentJudgeIdx, pendingReactions[currentJudgeIdx]);
+            if (CheckCollisionPointRec(mouse, btnPrevPage)) {
+                nasaFactsPage = (nasaFactsPage + 2) % 3;
+                return GameState::COMMITTEE;
+            }
+            if (CheckCollisionPointRec(mouse, btnNextPage)) {
+                nasaFactsPage = (nasaFactsPage + 1) % 3;
+                return GameState::COMMITTEE;
+            }
+            if (CheckCollisionPointRec(mouse, btnClose)) {
+                showNasaFacts = false;
+                return GameState::COMMITTEE;
+            }
+            return GameState::COMMITTEE;
+        }
+
+        if (step == 0) {
+            Rectangle btnNext = { 980.0f, 650.0f, 235.0f, 44.0f };
+            if (CheckCollisionPointRec(mouse, btnNext)) {
+                step = 1;
+            }
+        } else if (step >= 1 && step <= totalQ) {
+            int qIdx = step - 1;
+            for (int i = 0; i < 3; ++i) {
+                Rectangle optBtn = { 262.0f, 562.0f + i * 44.0f, 955.0f, 38.0f };
+                if (CheckCollisionPointRec(mouse, optBtn)) {
+                    float prevH = trustHale;
+                    float prevB = trustBrooks;
+                    float prevV = trustVance;
+
+                    trustHale   = std::clamp(trustHale   + questions[qIdx].haleDelta[i],   0.02f, 1.0f);
+                    trustBrooks = std::clamp(trustBrooks + questions[qIdx].brooksDelta[i], 0.02f, 1.0f);
+                    trustVance  = std::clamp(trustVance  + questions[qIdx].vanceDelta[i],  0.02f, 1.0f);
+
+                    lastDeltaHale   = static_cast<int>(std::round((trustHale   - prevH) * 100.0f));
+                    lastDeltaBrooks = static_cast<int>(std::round((trustBrooks - prevB) * 100.0f));
+                    lastDeltaVance  = static_cast<int>(std::round((trustVance  - prevV) * 100.0f));
+                    deltaFlashTimer = 4.0f;
+
+                    lastFeedbackEs = questions[qIdx].feedbackEs[i];
+                    lastFeedbackEn = questions[qIdx].feedbackEn[i];
+
+                    step++;
+                    if (step == delibStep) {
+                        deliberationLine = 0;
+                        float avg = (trustHale + trustBrooks + trustVance) / 3.0f;
+                        data.awardedBudget = 850.0f + std::pow(avg, 1.15f) * 1900.0f;
+                        data.remainingBudget = data.awardedBudget;
+                    }
+                    break;
                 }
-                break;
             }
-        }
-        return GameState::COMMITTEE;
-    }
-
-    if (writeMode && (stage == Stage::PITCH_INPUT || stage == Stage::JUDGE_ANSWER)) {
-        int key = GetCharPressed();
-        while (key > 0) {
-            if (key >= 32 && key <= 125 && userTypedText.size() < 260) {
-                userTypedText.push_back(static_cast<char>(key));
+        } else if (step == delibStep) {
+            Rectangle btnDelibNext = { 895.0f, 650.0f, 320.0f, 44.0f };
+            if (CheckCollisionPointRec(mouse, btnDelibNext)) {
+                if (deliberationLine < 2) {
+                    deliberationLine++;
+                } else {
+                    step = revealStep;
+                    epicRevealTimer = 0.0f;
+                    displayedBudget = 0.0f;
+                }
             }
-            key = GetCharPressed();
-        }
-        if (IsKeyPressed(KEY_BACKSPACE) && !userTypedText.empty()) {
-            userTypedText.pop_back();
-        }
-
-        Rectangle sendBtn = { 1065.0f, 645.0f, 160.0f, 44.0f };
-        bool canSend = userTypedText.size() >= 15;
-        bool clickedSend = canSend && IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && CheckCollisionPointRec(mousePos, sendBtn);
-
-        if (canSend && (clickedSend || IsKeyPressed(KEY_ENTER))) {
-            if (stage == Stage::PITCH_INPUT) {
-                EvaluatePitch(userTypedText, false, false);
-                reactStepIdx = 0;
-                stage = Stage::PITCH_REACT;
-                AdvanceStage(missionData);
-            } else {
-                EvaluateJudgeAnswer(currentJudgeIdx, userTypedText, false, false);
-                ApplyMoodDelta(currentJudgeIdx, pendingDeltas[currentJudgeIdx]);
-                stage = Stage::JUDGE_REACT;
-                StartDialogue(currentJudgeIdx, pendingReactions[currentJudgeIdx]);
+        } else if (step == revealStep) {
+            bool goodBudget = (data.awardedBudget >= 1340.0f);
+            if (!goodBudget) {
+                Rectangle btnRetry = { 620.0f, 650.0f, 275.0f, 44.0f };
+                if (CheckCollisionPointRec(mouse, btnRetry)) {
+                    Init(data.lang);
+                    return GameState::COMMITTEE;
+                }
             }
-        }
-        return GameState::COMMITTEE;
-    }
-
-    Rectangle nextBtn = { 985.0f, 645.0f, 245.0f, 44.0f };
-    bool clickedNext = IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && CheckCollisionPointRec(mousePos, nextBtn);
-
-    if (clickedNext || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
-        if (visibleChars < static_cast<float>(currentText.size())) {
-            visibleChars = static_cast<float>(currentText.size());
-        } else if (stage == Stage::VERDICT_FINAL) {
-            if (yesVotesCount >= 2) {
+            Rectangle btnToLab = { 910.0f, 650.0f, 305.0f, 44.0f };
+            if (CheckCollisionPointRec(mouse, btnToLab)) {
                 return GameState::HANGAR;
-            } else {
-                Init();
             }
-        } else {
-            AdvanceStage(missionData);
         }
     }
 
     return GameState::COMMITTEE;
 }
 
-void CommitteePhase::Draw(const SharedMissionData& missionData) const {
+void CommitteePhase::Draw(const SharedMissionData& data) {
+    int totalQ = static_cast<int>(questions.size());
+    int delibStep = totalQ + 1;
+    int revealStep = totalQ + 2;
+
     if (texBg.id > 0) {
         DrawTexturePro(texBg, { 0, 0, (float)texBg.width, (float)texBg.height },
                        { 0, 0, (float)SCREEN_WIDTH, (float)SCREEN_HEIGHT }, { 0, 0 }, 0.0f, WHITE);
     } else {
-        ClearBackground(Color{ 39, 49, 92, 255 });
+        ClearBackground(Color{ 245, 236, 200, 255 });
     }
 
-    for (int i = 0; i < 3; ++i) {
-        const auto& j = judges[i];
-        float hopY = (activeSpeakerIdx == i) ? std::sin(static_cast<float>(GetTime()) * 16.0f) * 5.0f : 0.0f;
+    DrawRectangle(24, 14, 105, 32, Color{ 20, 28, 48, 240 });
+    DrawRectangleLines(24, 14, 105, 32, GOLD);
+    DrawUIText("MENÚ", 50.0f, 20.0f, 18.0f, WHITE);
 
-        if (j.sprite.id > 0) {
-            DrawTexturePro(j.sprite, { 0, 0, (float)j.sprite.width, (float)j.sprite.height },
-                           { j.posX - 70.0f, 62.0f + hopY, 140.0f, 180.0f }, { 0, 0 }, 0.0f, WHITE);
-        } else {
-            DrawRectangle(static_cast<int>(j.posX - 50), static_cast<int>(80 + hopY), 100, 150, j.fallbackColor);
-            DrawRectangleLines(static_cast<int>(j.posX - 50), static_cast<int>(80 + hopY), 100, 150, BLACK);
-        }
+    DrawRectangle(138, 14, 125, 32, Color{ 38, 125, 62, 240 });
+    DrawRectangleLines(138, 14, 125, 32, GOLD);
+    DrawUIText(Tr(data.lang, "GUARDAR", "SAVE"), 162.0f, 20.0f, 18.0f, WHITE);
 
-        int barX = static_cast<int>(j.posX + 68);
-        int barY = 78;
-        int barH = 148;
-        Color barCol = (j.mood >= 65) ? Color{ 88, 179, 104, 255 } : ((j.mood >= 35) ? Color{ 232, 179, 60, 255 } : Color{ 217, 83, 79, 255 });
-
-        const char* faceStr = (j.mood >= 65) ? ":)" : ((j.mood >= 35) ? ":|" : ":(");
-        DrawText(faceStr, barX - 2, barY - 28, 22, WHITE);
-
-        DrawRectangle(barX, barY, 24, barH, Color{ 13, 17, 36, 255 });
-        int fillH = static_cast<int>((j.mood / 100.0f) * (barH - 6));
-        DrawRectangle(barX + 3, barY + barH - 3 - fillH, 18, fillH, barCol);
-        DrawRectangleLinesEx({ (float)barX, (float)barY, 24.0f, (float)barH }, 3.0f, BLACK);
-
-        if (j.popTimer > 0.0f && j.lastDelta != 0) {
-            Color popCol = (j.lastDelta > 0) ? GREEN : RED;
-            DrawText(TextFormat("%+d", j.lastDelta), barX - 10, static_cast<int>(barY - 52 - (1.5f - j.popTimer) * 15.0f), 22, popCol);
-        }
+    if (saveNoticeTimer > 0.0f) {
+        DrawUIText(Tr(data.lang, "¡Safe Part guardado!", "Safe Part saved!"), 278.0f, 19.0f, 19.0f, DARKGREEN);
     }
+
+    DrawRectangle(22, 54, 465, 232, Color{ 12, 18, 34, 248 });
+    DrawRectangleLinesEx({ 22.0f, 54.0f, 465.0f, 232.0f }, 3.0f, Color{ 242, 193, 78, 255 });
+    DrawUIText(Tr(data.lang, "AUDIENCIA PRESUPUESTO", "BUDGET HEARING"), 36.0f, 70.0f, 20.0f, Color{ 242, 193, 78, 255 });
+
+    DrawRectangle(330, 66, 142, 34, Color{ 242, 193, 78, 255 });
+    DrawUIText(Tr(data.lang, "DATOS NASA", "NASA FACTS"), 347.0f, 73.0f, 18.0f, BLACK, false);
+
+    if (step < revealStep) {
+        DrawUIText(step == delibStep ? Tr(data.lang, "DELIBERANDO...", "DELIBERATING...")
+                                     : Tr(data.lang, "$ ??? MILLONES", "$ ??? MILLION"),
+                   36.0f, 106.0f, 32.0f, step == delibStep ? SKYBLUE : WHITE);
+    } else {
+        bool goodBudget = (data.awardedBudget >= 1340.0f);
+        DrawUIText(TextFormat(Tr(data.lang, "$ %.0f MILLONES", "$ %.0f MILLION"), displayedBudget),
+                   36.0f, 106.0f, 34.0f, goodBudget ? GREEN : Color{ 255, 85, 85, 255 });
+    }
+
+    auto drawMemberRow = [&](const char* name, float val, int delta, float y) {
+        Color barCol = GetApprovalColor(val);
+        DrawUIText(name, 36.0f, y, 18.0f, LIGHTGRAY);
+
+        DrawRectangle(195, static_cast<int>(y + 4), 140, 14, Color{ 25, 34, 58, 255 });
+        DrawRectangle(195, static_cast<int>(y + 4), static_cast<int>(140.0f * val), 14, barCol);
+        DrawRectangleLines(195, static_cast<int>(y + 4), 140, 14, Color{ 90, 105, 135, 255 });
+
+        DrawUIText(TextFormat("%d%%", (int)std::round(val * 100.0f)), 344.0f, y, 18.0f, barCol);
+
+        if (deltaFlashTimer > 0.0f && delta != 0) {
+            Color dCol = (delta > 0) ? GREEN : RED;
+            DrawUIText(TextFormat("%+d%%", delta), 408.0f, y, 18.0f, dCol);
+        }
+    };
+
+    drawMemberRow("SR. HALE", trustHale, lastDeltaHale, 158.0f);
+    drawMemberRow(Tr(data.lang, "PDTE. BROOKS", "CHMN. BROOKS"), trustBrooks, lastDeltaBrooks, 194.0f);
+    drawMemberRow("DRA. VANCE", trustVance, lastDeltaVance, 230.0f);
+
+    Color colHale   = (step == delibStep && deliberationLine == 0) ? WHITE : Color{ 235, 235, 235, 255 };
+    Color colBrooks = (step == delibStep && deliberationLine == 2) ? WHITE : Color{ 235, 235, 235, 255 };
+    Color colVance  = (step == delibStep && deliberationLine == 1) ? WHITE : Color{ 235, 235, 235, 255 };
+
+    if (texGrey.id > 0)  DrawTexturePro(texGrey,  { 0, 0, (float)texGrey.width,  (float)texGrey.height },  { 625, 80, 150, 260 }, { 0, 0 }, 0.0f, colHale);
+    if (texBlue.id > 0)  DrawTexturePro(texBlue,  { 0, 0, (float)texBlue.width,  (float)texBlue.height },  { 830, 80, 150, 260 }, { 0, 0 }, 0.0f, colBrooks);
+    if (texSlick.id > 0) DrawTexturePro(texSlick, { 0, 0, (float)texSlick.width, (float)texSlick.height }, { 1030, 80, 150, 260 }, { 0, 0 }, 0.0f, colVance);
+
+    auto drawTrustBar = [](int x, float val) {
+        DrawRectangle(x, 100, 24, 145, Color{ 15, 20, 35, 255 });
+        int fillH = static_cast<int>(141.0f * std::clamp(val, 0.0f, 1.0f));
+        Color gradCol = GetApprovalColor(val);
+        DrawRectangle(x + 2, 100 + (143 - fillH), 20, fillH, gradCol);
+        DrawRectangleLines(x, 100, 24, 145, BLACK);
+    };
+    drawTrustBar(770, trustHale);
+    drawTrustBar(972, trustBrooks);
+    drawTrustBar(1172, trustVance);
 
     if (texDesk.id > 0) {
         DrawTexturePro(texDesk, { 0, 0, (float)texDesk.width, (float)texDesk.height },
-                       { 470.0f, 228.0f, 810.0f, 492.0f }, { 0, 0 }, 0.0f, WHITE);
-    } else {
-        DrawRectangle(480, 250, 780, 260, Color{ 107, 70, 48, 255 });
-        DrawRectangleLinesEx({ 480, 250, 780, 260 }, 4.0f, BLACK);
-    }
-
-    for (const auto& j : judges) {
-        Rectangle plate = { j.posX - 84.0f, 282.0f, 168.0f, 42.0f };
-        DrawRectangleRec(plate, Color{ 242, 193, 78, 255 });
-        DrawRectangleLinesEx(plate, 3.0f, BLACK);
-        DrawText(j.name.c_str(), static_cast<int>(plate.x + 8), static_cast<int>(plate.y + 6), 12, BLACK);
-        DrawText(j.role.c_str(), static_cast<int>(plate.x + 8), static_cast<int>(plate.y + 22), 12, Color{ 50, 40, 20, 255 });
-    }
-
-    DrawRectangle(20, 20, 450, 235, Color{ 13, 17, 36, 255 });
-    DrawRectangleLinesEx({ 20, 20, 450, 235 }, 4.0f, Color{ 242, 193, 78, 255 });
-    DrawText("PRESUPUESTO MISION", 38, 36, 19, Color{ 242, 193, 78, 255 });
-
-    Rectangle factBtn = { 330.0f, 34.0f, 125.0f, 34.0f };
-    DrawRectangleRec(factBtn, Color{ 242, 193, 78, 255 });
-    DrawRectangleLinesEx(factBtn, 2.0f, BLACK);
-    DrawText("DATOS NASA", 340, 44, 15, BLACK);
-
-    if (stage == Stage::VERDICT_FINAL && yesVotesCount >= 2) {
-        DrawText(TextFormat("$ %.2f BILLONES", totalApprovedMillions / 1000.0f), 38, 74, 30, WHITE);
-    } else if (stage == Stage::VERDICT_FINAL) {
-        DrawText("$ 0.0 BILLONES", 38, 74, 30, RED);
-    } else {
-        DrawText("$ ??? BILLONES", 38, 74, 30, WHITE);
-    }
-
-    for (size_t i = 0; i < judges.size(); ++i) {
-        int rowY = 128 + static_cast<int>(i) * 36;
-        DrawText(judges[i].name.c_str(), 38, rowY, 17, Color{ 201, 208, 240, 255 });
-        const char* pledgeTxt = (judges[i].pledgedMillions < 0) ? "..." :
-                                (judges[i].pledgedMillions == 0) ? "NO" :
-                                TextFormat("$ %.2f B", judges[i].pledgedMillions / 1000.0f);
-        DrawText(pledgeTxt, 355, rowY, 19, Color{ 242, 193, 78, 255 });
+                       { 470, 240, 810, 360 }, { 0, 0 }, 0.0f, WHITE);
     }
 
     if (texHero.id > 0) {
         DrawTexturePro(texHero, { 0, 0, (float)texHero.width, (float)texHero.height },
-                       { 8.0f, 445.0f, 225.0f, 315.0f }, { 0, 0 }, 0.0f, WHITE);
-    } else {
-        DrawRectangle(25, 480, 180, 240, DARKBLUE);
+                       { 15, 445, 225, 275 }, { 0, 0 }, 0.0f, WHITE);
     }
 
-    if (!writeMode && (stage == Stage::PITCH_INPUT || stage == Stage::JUDGE_ANSWER)) {
-        DrawRectangle(245, 245, 1015, 280, Color{ 244, 236, 216, 255 });
-        DrawRectangleLinesEx({ 245, 245, 1015, 280 }, 4.0f, BLACK);
-        DrawText("ELIGE TU RESPUESTA [Teclas 1-3 o Clic]:", 265, 260, 18, Color{ 90, 83, 72, 255 });
+    if (step >= 2 && step <= delibStep && !lastFeedbackEs.empty()) {
+        DrawRectangle(498, 374, 742, 56, Color{ 14, 21, 38, 248 });
+        DrawRectangleLinesEx({ 498.0f, 374.0f, 742.0f, 56.0f }, 2.0f, SKYBLUE);
 
-        Vector2 mousePos = GetMousePosition();
-        for (size_t i = 0; i < currentChoices.size(); ++i) {
-            Rectangle optRect = { 260.0f, 295.0f + i * 74.0f, 985.0f, 64.0f };
-            bool hover = CheckCollisionPointRec(mousePos, optRect);
-            DrawRectangleRec(optRect, hover ? Color{ 242, 193, 78, 255 } : Color{ 255, 250, 240, 255 });
-            DrawRectangleLinesEx(optRect, 3.0f, BLACK);
+        DrawUIText(Tr(data.lang, lastFeedbackEs.c_str(), lastFeedbackEn.c_str()), 512.0f, 382.0f, 16.0f, WHITE);
 
-            const char* letter = (i == 0) ? "[1]" : ((i == 1) ? "[2]" : "[3]");
-            DrawText(letter, 272, static_cast<int>(optRect.y + 18), 20, BLACK);
-            DrawWrappedText(currentChoices[i].text, 318.0f, optRect.y + 10.0f, 910.0f, 18, Color{ 27, 27, 38, 255 });
+        int avgDelta = static_cast<int>(std::round((lastDeltaHale + lastDeltaBrooks + lastDeltaVance) / 3.0f));
+        Color dCol = (avgDelta >= 0) ? GREEN : RED;
+        DrawUIText(TextFormat(Tr(data.lang,
+                   "Variación Aprobación:  Hale %+d%%  |  Brooks %+d%%  |  Vance %+d%%",
+                   "Approval Change:  Hale %+d%%  |  Brooks %+d%%  |  Vance %+d%%"),
+                   lastDeltaHale, lastDeltaBrooks, lastDeltaVance),
+                   512.0f, 405.0f, 15.0f, dCol);
+    }
+
+    DrawRectangle(245, 488, 995, 216, Color{ 247, 241, 225, 250 });
+    DrawRectangleLinesEx({ 245.0f, 488.0f, 995.0f, 216.0f }, 3.0f, Color{ 15, 20, 35, 255 });
+
+    if (step == 0) {
+        DrawRectangle(265, 468, 175, 30, Color{ 15, 20, 35, 255 });
+        DrawUIText(Tr(data.lang, "NARRADOR", "NARRATOR"), 288.0f, 473.0f, 18.0f, GOLD);
+
+        DrawUIText(Tr(data.lang, "FASE 1 · AUDITORÍA EXIGENTE DEL COMITÉ DE LA NASA (12 RONDAS)",
+                                "PHASE 1 · STRICT NASA COMMITTEE AUDIT (12 ROUNDS)"), 265.0f, 510.0f, 22.0f, BLACK, false);
+
+        DrawUITextBoxed(Tr(data.lang,
+            "Partes con solo un 36% de confianza. Deberás superar 12 rondas técnicas y financieras con rigor: cada fallo resta mucha aprobación y puede dejarte sin fondos suficientes para construir un cohete capaz de alcanzar la órbita lunar.\n"
+            "Consejo: Estudia DATOS NASA (arriba a la izquierda) antes de responder.",
+            "You start with only 36% trust. You must pass 12 technical and fiscal rounds: every mistake heavily penalizes approval and may leave you short of funds to build a Moon-capable rocket.\n"
+            "Tip: Review NASA FACTS (top left) before answering."),
+            { 265.0f, 544.0f, 950.0f, 100.0f }, 19.0f, 4.0f, DARKGRAY, false);
+
+        DrawRectangle(980, 650, 235, 44, Color{ 15, 20, 35, 255 });
+        DrawUIText(Tr(data.lang, "COMENZAR >", "START HEARING >"), 1020.0f, 660.0f, 20.0f, GOLD);
+    } else if (step >= 1 && step <= totalQ) {
+        const auto& q = questions[step - 1];
+        DrawRectangle(265, 468, 410, 30, Color{ 15, 20, 35, 255 });
+        DrawUIText(Tr(data.lang, q.speakerEs.c_str(), q.speakerEn.c_str()), 280.0f, 473.0f, 18.0f, GOLD);
+
+        DrawRectangle(985, 468, 235, 30, Color{ 32, 48, 82, 255 });
+        DrawUIText(Tr(data.lang, q.topicEs.c_str(), q.topicEn.c_str()), 998.0f, 473.0f, 16.0f, SKYBLUE);
+
+        DrawUITextBoxed(Tr(data.lang, q.textEs.c_str(), q.textEn.c_str()),
+                        { 265.0f, 504.0f, 950.0f, 54.0f }, 19.0f, 2.0f, BLACK, false);
+
+        for (int i = 0; i < 3; ++i) {
+            Rectangle optBtn = { 262.0f, 562.0f + i * 44.0f, 955.0f, 38.0f };
+            bool hover = CheckCollisionPointRec(GetMousePosition(), optBtn);
+            DrawRectangleRec(optBtn, hover ? Color{ 34, 54, 94, 255 } : Color{ 18, 25, 44, 255 });
+            DrawRectangleLinesEx(optBtn, 1.5f, hover ? WHITE : GOLD);
+            DrawUIText(Tr(data.lang, q.optionsEs[i].c_str(), q.optionsEn[i].c_str()), 278.0f, 570.0f + i * 44.0f, 19.0f, WHITE);
         }
-    }
+    } else if (step == delibStep) {
+        DrawRectangle(265, 468, 430, 30, Color{ 15, 20, 35, 255 });
+        DrawUIText(Tr(data.lang, "DELIBERACIÓN DEL TRIBUNAL (SESIÓN CERRADA)", "COMMITTEE DELIBERATION (EXECUTIVE SESSION)"), 280.0f, 473.0f, 17.0f, GOLD);
 
-    DrawRectangle(245, 535, 1015, 170, Color{ 244, 236, 216, 255 });
-    DrawRectangleLinesEx({ 245, 535, 1015, 170 }, 4.0f, BLACK);
+        const char* judgeSpeaker = "";
+        const char* judgeQuote = "";
 
-    std::string speakerName = "NARRADOR";
-    if (activeSpeakerIdx == -2) speakerName = "TU - ECONOMISTA DE MISION";
-    else if (activeSpeakerIdx >= 0 && activeSpeakerIdx < 3) speakerName = judges[activeSpeakerIdx].name;
+        if (deliberationLine == 0) {
+            judgeSpeaker = Tr(data.lang, "SR. HALE (Tesorero):", "MR. HALE (Treasurer):");
+            if (trustHale >= 0.70f) {
+                judgeQuote = Tr(data.lang,
+                    "\"Los números cuadran al centavo. Su rigor en los hitos de auditoría nos permite liberar una partida presupuestaria sólida sin temor a desvíos fiscales.\"",
+                    "\"The numbers check out to the cent. Your rigor on audit milestones allows us to release a strong budget allocation without fiscal overrun fears.\"");
+            } else {
+                judgeQuote = Tr(data.lang,
+                    "\"Existen serias dudas en el control de costes y reservas fiscales. Aplicaremos un recorte severo a los fondos de hardware hasta ver resultados.\"",
+                    "\"Serious concerns remain regarding cost controls and fiscal reserves. We must apply a strict cap on hardware funds until results are proven.\"");
+            }
+        } else if (deliberationLine == 1) {
+            judgeSpeaker = Tr(data.lang, "DRA. VANCE (Ingeniera Jefe):", "DR. VANCE (Chief Engineer):");
+            if (trustVance >= 0.70f) {
+                judgeQuote = Tr(data.lang,
+                    "\"Domina la ecuación del cohete, los márgenes de empuje TWR y la reentrada a 11 km/s. Confío plenamente en su criterio para ensamblar la nave.\"",
+                    "\"You grasp the rocket equation, TWR liftoff margins, and 11 km/s reentry physics. I fully trust your engineering judgment to assemble the vehicle.\"");
+            } else {
+                judgeQuote = Tr(data.lang,
+                    "\"Cometió errores técnicos graves. Con un presupuesto tan ajustado tendrá que calcular cada tonelada en el hangar o no llegará ni a órbita.\"",
+                    "\"You made critical technical errors. With such a tight budget you must calculate every ton in the hangar or you won't even reach orbit.\"");
+            }
+        } else {
+            judgeSpeaker = Tr(data.lang, "PRESIDENTE BROOKS (Comité Espacial):", "CHAIRMAN BROOKS (Space Committee):");
+            float avg = (trustHale + trustBrooks + trustVance) / 3.0f;
+            if (avg >= 0.70f) {
+                judgeQuote = Tr(data.lang,
+                    "\"El veredicto es favorable: la misión cuenta con el respaldo total de este Comité. Sr. Hale, proceda a anunciar la dotación oficial aprobada.\"",
+                    "\"The verdict is favorable: this mission has the full backing of this Committee. Mr. Hale, please announce the official approved endowment.\"");
+            } else {
+                judgeQuote = Tr(data.lang,
+                    "\"Aprobación mínima por mayoría ajustada. El presupuesto de hardware será muy limitado; cada millón contará en el laboratorio.\"",
+                    "\"Narrow approval by split vote. Your hardware budget will be heavily constrained; every single million will count in the assembly lab.\"");
+            }
+        }
 
-    int tagW = MeasureText(speakerName.c_str(), 18) + 28;
-    DrawRectangle(262, 514, tagW, 32, Color{ 27, 27, 38, 255 });
-    DrawRectangleLinesEx({ 262.0f, 514.0f, (float)tagW, 32.0f }, 3.0f, BLACK);
-    DrawText(speakerName.c_str(), 276, 521, 18, Color{ 242, 193, 78, 255 });
+        DrawUIText(judgeSpeaker, 268.0f, 512.0f, 21.0f, Color{ 20, 45, 95, 255 }, false);
+        DrawUITextBoxed(judgeQuote, { 268.0f, 545.0f, 945.0f, 95.0f }, 20.0f, 5.0f, BLACK, false);
 
-    if (writeMode && (stage == Stage::PITCH_INPUT || stage == Stage::JUDGE_ANSWER)) {
-        DrawText(currentText.c_str(), 268, 554, 18, Color{ 90, 83, 72, 255 });
-        DrawRectangle(268, 580, 780, 108, Color{ 255, 250, 240, 255 });
-        DrawRectangleLinesEx({ 268, 580, 780, 108 }, 3.0f, BLACK);
-        DrawWrappedText(userTypedText + "_", 278.0f, 590.0f, 760.0f, 19, BLACK);
-
-        Rectangle sendBtn = { 1065.0f, 645.0f, 160.0f, 44.0f };
-        bool canSend = userTypedText.size() >= 15;
-        DrawRectangleRec(sendBtn, canSend ? Color{ 27, 27, 38, 255 } : GRAY);
-        DrawText("ENVIAR >", 1095, 657, 19, WHITE);
+        Rectangle btnDelibNext = { 895.0f, 650.0f, 320.0f, 44.0f };
+        DrawRectangleRec(btnDelibNext, deliberationLine < 2 ? Color{ 32, 54, 96, 255 } : Color{ 185, 130, 20, 255 });
+        DrawRectangleLinesEx(btnDelibNext, 2.0f, BLACK);
+        DrawUIText(deliberationLine < 2
+                   ? Tr(data.lang, "ESCUCHAR SIGUIENTE JUEZ >", "HEAR NEXT JUDGE >")
+                   : Tr(data.lang, "REVELAR PRESUPUESTO >", "REVEAL BUDGET >"),
+                   920.0f, 660.0f, 19.0f, WHITE);
     } else {
-        std::string shown = currentText.substr(0, static_cast<size_t>(visibleChars));
-        DrawWrappedText(shown, 268.0f, 558.0f, 965.0f, 21, Color{ 27, 27, 38, 255 });
+        bool goodBudget = (data.awardedBudget >= 1340.0f);
+        float avgPct = ((trustHale + trustBrooks + trustVance) / 3.0f) * 100.0f;
+        float programBillions = (displayedBudget * 35.0f) / 1000.0f;
 
-        if (stage == Stage::MODE_SELECT) {
-            Rectangle btnPick  = { 735.0f, 645.0f, 245.0f, 44.0f };
-            Rectangle btnWrite = { 1000.0f, 645.0f, 240.0f, 44.0f };
-            DrawRectangleRec(btnPick, Color{ 27, 27, 38, 255 });
-            DrawText("[1] ELEGIR ENTRE 3", 752, 657, 17, Color{ 242, 193, 78, 255 });
-            DrawRectangleRec(btnWrite, Color{ 27, 27, 38, 255 });
-            DrawText("[2] ESCRIBIR YO", 1025, 657, 17, WHITE);
-        } else if (stage != Stage::PITCH_INPUT && stage != Stage::JUDGE_ANSWER) {
-            Rectangle nextBtn = { 985.0f, 645.0f, 245.0f, 44.0f };
-            DrawRectangleRec(nextBtn, (stage == Stage::VERDICT_FINAL && yesVotesCount >= 2) ? DARKGREEN : Color{ 27, 27, 38, 255 });
-            const char* btnLabel = (stage == Stage::VERDICT_FINAL)
-                ? (yesVotesCount >= 2 ? "IR AL LABORATORIO >" : "REINTENTAR")
-                : "SIGUIENTE >";
-            DrawText(btnLabel, 1005, 657, 18, Color{ 242, 193, 78, 255 });
+        if (goodBudget) {
+            // RESOLUCIÓN POSITIVA (DORADA Y CELEBRATORIA)
+            float pulse = 1.0f + 0.04f * std::sin(epicRevealTimer * 6.0f);
+
+            DrawRectangle(252, 495, 981, 202, Color{ 255, 232, 165, 255 });
+            DrawRectangleLinesEx({ 252.0f, 495.0f, 981.0f, 202.0f }, 3.0f, Color{ 212, 155, 25, 255 });
+
+            DrawRectangle(265, 468, 390, 30, Color{ 32, 125, 58, 255 });
+            DrawUIText(Tr(data.lang, "RESOLUCIÓN APROBADA POR EL CONGRESO", "RESOLUTION APPROVED BY CONGRESS"), 280.0f, 473.0f, 17.0f, WHITE);
+
+            DrawUIText(TextFormat(Tr(data.lang,
+                       "APROBACIÓN MEDIA DEL COMITÉ: %.0f%%   (Programa plurianual: $%.1fB)",
+                       "AVERAGE COMMITTEE APPROVAL: %.0f%%   (Multi-year program: $%.1fB)"), avgPct, programBillions),
+                       272.0f, 508.0f, 19.0f, DARKGRAY, false);
+
+            DrawUIText(TextFormat(Tr(data.lang,
+                       "PRESUPUESTO HANGAR: $ %.0f MILLONES",
+                       "HANGAR HARDWARE BUDGET: $ %.0f MILLION"), displayedBudget),
+                       272.0f, 536.0f, 34.0f * pulse, Color{ 22, 125, 48, 255 });
+
+            DrawUIText(Tr(data.lang,
+                       "¡Enhorabuena! Cuentas con fondos suficientes para ensamblar un cohete lunar.",
+                       "Congratulations! You have secured enough funding to build a Moon rocket."),
+                       272.0f, 586.0f, 20.0f, BLACK, false);
+
+            DrawUIText(Tr(data.lang,
+                       "Se auto-guardará al entrar en el Hangar de cohetes.",
+                       "Progress will auto-save upon entering the Rocket Hangar."),
+                       272.0f, 620.0f, 18.0f, DARKGRAY, false);
+
+            Rectangle btnToLab = { 910.0f, 650.0f, 305.0f, 44.0f };
+            DrawRectangleRec(btnToLab, Color{ 38, 125, 62, 255 });
+            DrawRectangleLinesEx(btnToLab, 2.0f, BLACK);
+            DrawUIText(Tr(data.lang, "IR AL LABORATORIO >", "GO TO ASSEMBLY LAB >"), 942.0f, 660.0f, 20.0f, WHITE);
+        } else {
+            // RESOLUCIÓN NEGATIVA (ROJO OSCURO / REPRIMENDA / SIN CELEBRACIÓN)
+            DrawRectangle(252, 495, 981, 202, Color{ 56, 20, 24, 252 });
+            DrawRectangleLinesEx({ 252.0f, 495.0f, 981.0f, 202.0f }, 3.0f, Color{ 225, 55, 55, 255 });
+
+            DrawRectangle(265, 468, 435, 30, Color{ 175, 32, 32, 255 });
+            DrawUIText(Tr(data.lang, "AUDIENCIA SUSPENSA · RECORTE DE EMERGENCIA", "HEARING FAILED · EMERGENCY BUDGET CUT"), 280.0f, 473.0f, 17.0f, WHITE);
+
+            DrawUIText(TextFormat(Tr(data.lang,
+                       "APROBACIÓN MEDIA: %.0f%% — EL COMITÉ RECHAZA FINANCIAR EL COHETE LUNAR",
+                       "AVERAGE APPROVAL: %.0f%% — COMMITTEE REFUSES TO FUND LUNAR ROCKET"), avgPct),
+                       272.0f, 508.0f, 19.0f, Color{ 255, 165, 165, 255 });
+
+            DrawUIText(TextFormat(Tr(data.lang,
+                       "PRESUPUESTO RECORTADO: $ %.0f MILLONES (INSUFICIENTE)",
+                       "SLASHED BUDGET: $ %.0f MILLION (INSUFFICIENT)"), displayedBudget),
+                       272.0f, 538.0f, 30.0f, Color{ 255, 80, 80, 255 });
+
+            DrawUIText(Tr(data.lang,
+                       "Con menos de $1.340M no podrás costear tanques ni motores para alcanzar la Luna.",
+                       "With less than $1,340M you cannot afford tanks or engines to reach the Moon."),
+                       272.0f, 584.0f, 19.0f, WHITE);
+
+            DrawUIText(Tr(data.lang,
+                       "Puedes repetir la audiencia para mejorar tu nota o entrar al Hangar con este recorte.",
+                       "You may retry the hearing to improve your score or enter the Hangar with this cut."),
+                       272.0f, 614.0f, 17.0f, LIGHTGRAY);
+
+            Rectangle btnRetry = { 620.0f, 650.0f, 275.0f, 44.0f };
+            DrawRectangleRec(btnRetry, Color{ 165, 42, 42, 255 });
+            DrawRectangleLinesEx(btnRetry, 2.0f, WHITE);
+            DrawUIText(Tr(data.lang, "REINTENTAR AUDIENCIA", "RETRY HEARING"), 650.0f, 661.0f, 18.0f, WHITE);
+
+            Rectangle btnToLab = { 910.0f, 650.0f, 305.0f, 44.0f };
+            DrawRectangleRec(btnToLab, Color{ 75, 82, 96, 255 });
+            DrawRectangleLinesEx(btnToLab, 2.0f, LIGHTGRAY);
+            DrawUIText(Tr(data.lang, "IR AL HANGAR IGUAL >", "GO TO HANGAR ANYWAY >"), 930.0f, 661.0f, 18.0f, WHITE);
         }
     }
 
     if (showNasaFacts) {
-        DrawNasaFactsModal();
+        DrawRectangle(210, 115, 860, 410, Color{ 10, 15, 30, 252 });
+        DrawRectangleLinesEx({ 210.0f, 115.0f, 860.0f, 410.0f }, 3.0f, GOLD);
+
+        DrawUIText(TextFormat(Tr(data.lang,
+            "ARCHIVO DE AUDITORÍA NASA · PÁGINA %d / 3",
+            "NASA AUDIT ARCHIVE · PAGE %d / 3"), nasaFactsPage + 1),
+            245.0f, 136.0f, 24.0f, GOLD);
+
+        if (nasaFactsPage == 0) {
+            DrawUITextBoxed(Tr(data.lang,
+                "1. PRESUPUESTO DE PROGRAMA: El desarrollo Artemis/Apolo requiere ~$93B auditados por hitos con 15% de reserva de contingencia.\n"
+                "2. PERFIL LOR: El Encuentro en Órbita Lunar separa la cápsula del módulo lunar, ahorrando decenas de toneladas en rampa.\n"
+                "3. EMPUJE-PESO (TWR): Un cohete lunar exige TWR > 1,20 (Saturn V = 1,22) para vencer pérdidas gravitatorias.\n"
+                "4. FRACCIÓN DE PROPELENTE: Por Tsiolkovsky, entre el 85% y el 90% de la masa en rampa debe ser propelente.",
+                "1. PROGRAM BUDGET: Artemis/Apollo development requires ~$93B milestone-audited with a 15% contingency reserve.\n"
+                "2. LOR PROFILE: Lunar Orbit Rendezvous separates the capsule from the lander, saving dozens of tons on the pad.\n"
+                "3. THRUST-TO-WEIGHT (TWR): A Moon rocket demands liftoff TWR > 1.20 (Saturn V = 1.22) to beat gravity drag.\n"
+                "4. PROPELLANT FRACTION: By Tsiolkovsky's law, 85% to 90% of total pad mass must be propellant."),
+                { 245.0f, 182.0f, 790.0f, 275.0f }, 19.0f, 6.0f, WHITE);
+        } else if (nasaFactsPage == 1) {
+            DrawUITextBoxed(Tr(data.lang,
+                "5. CRIOGENIA: RP-1/LOX aporta alto empuje en 1ª etapa, mientras LH2/LOX maximiza el Isp (~450s) en etapas superiores.\n"
+                "6. SEGURIDAD (LES): La Torre de Escape sólida extrae la cápsula en milisegundos ante anomalías en el lanzamiento.\n"
+                "7. INYECCIÓN TLI: La trayectoria de regreso libre apunta 3 días por delante de la órbita lunar para interceptarla.\n"
+                "8. REENTRADA LUNAR: Regresar a ~11 km/s (4x energía de LEO) exige escudo térmico ablativo fenólico y doble salto.",
+                "5. CRYOGENICS: RP-1/LOX delivers high liftoff thrust on Stage 1, while LH2/LOX maximizes Isp (~450s) upstairs.\n"
+                "6. CREW SAFETY (LES): A solid Launch Escape System pulls the capsule clear in milliseconds during launch anomalies.\n"
+                "7. TLI TRAJECTORY: A free-return trajectory aims 3 days ahead of the Moon's orbital path for accurate intercept.\n"
+                "8. LUNAR REENTRY: Returning at ~11 km/s (4x LEO kinetic energy) requires a phenolic ablative heat shield."),
+                { 245.0f, 182.0f, 790.0f, 275.0f }, 19.0f, 6.0f, WHITE);
+        } else {
+            DrawUITextBoxed(Tr(data.lang,
+                "9. RADIACIÓN ESPACIO PROFUNDO: Los tanques de agua potable rodean el refugio solar junto a ordenadores triples (TMR).\n"
+                "10. CONTRATOS: Contratos de precio fijo por hitos verificables y auditoría abierta evitan sobrecostes.\n"
+                "11. ALUNIZAJE POLAR: La Navegación Óptica por Terreno (TRN) con LIDAR evita cráteres y sombras en el polo sur.\n"
+                "12. RETORNO CIENTÍFICO: Muestras criogénicas, sismómetros y retrorreflectores láser justifican la inversión.",
+                "9. DEEP SPACE RADIATION: Potable water tanks buffer the solar storm shelter alongside triple-redundant computers.\n"
+                "10. CONTRACTING: Firm-fixed-price milestone contracts with open audits prevent multi-billion-dollar overruns.\n"
+                "11. POLAR LANDING: Terrain Relative Navigation (TRN) with LIDAR avoids craters and deep shadows at the South Pole.\n"
+                "12. SCIENCE ROI: Cryogenic samples, seismometers, and laser retroreflectors justify Senate funding."),
+                { 245.0f, 182.0f, 790.0f, 275.0f }, 19.0f, 6.0f, WHITE);
+        }
+
+        DrawRectangle(250, 470, 160, 36, Color{ 35, 55, 95, 255 });
+        DrawRectangleLines(250, 470, 160, 36, SKYBLUE);
+        DrawUIText(Tr(data.lang, "< ANTERIOR", "< PREV"), 280.0f, 478.0f, 18.0f, WHITE);
+
+        DrawRectangle(425, 470, 160, 36, Color{ 35, 55, 95, 255 });
+        DrawRectangleLines(425, 470, 160, 36, SKYBLUE);
+        DrawUIText(Tr(data.lang, "SIGUIENTE >", "NEXT >"), 455.0f, 478.0f, 18.0f, WHITE);
+
+        DrawRectangle(880, 470, 150, 36, Color{ 130, 40, 40, 255 });
+        DrawRectangleLines(880, 470, 150, 36, WHITE);
+        DrawUIText(Tr(data.lang, "CERRAR", "CLOSE"), 920.0f, 478.0f, 18.0f, WHITE);
     }
 }
 
-void CommitteePhase::DrawNasaFactsModal() const {
-    DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(BLACK, 0.75f));
-    DrawRectangle(80, 60, SCREEN_WIDTH - 160, SCREEN_HEIGHT - 120, Color{ 244, 236, 216, 255 });
-    DrawRectangleLinesEx({ 80, 60, SCREEN_WIDTH - 160, SCREEN_HEIGHT - 120 }, 4.0f, Color{ 242, 193, 78, 255 });
-
-    DrawText("TUS NOTAS: CUANTO CUESTA REALMENTE IR A LA LUNA (AUDITORIA NASA OIG)", 105, 85, 20, BLACK);
-    const char* bullets[] = {
-        "- Lanzar el cohete SLS + capsula Orion cuesta ~4.100 millones $ por vuelo (IG-22-003).",
-        "- La capsula Orion cuesta ~1.000M$ mas ~300M$ de su modulo de servicio.",
-        "- Todo el programa Artemis (2012-2025) asciende a ~93.000 millones $ (IG-22-003).",
-        "- Contratos de coste reembolsable se dispararon: SLS subio +33% y Artemis I +4.300M$ (IG-24-001).",
-        "- Aterrizadores a PRECIO FIJO: SpaceX (2.890M$) y Blue Origin (3.400M$) apenas variaron (IG-26-004).",
-        "- Sondas roboticas (CLPS) cuestan 80M$-200M$ cada una, con 26% de sobrecoste medio (IG-24-013).",
-        "- Presupuesto realista para UNA mision tripulada: entre 4.000M$ y 6.500M$ (tope del comite)."
-    };
-
-    for (int i = 0; i < 7; ++i) {
-        DrawText(bullets[i], 110, 138 + i * 54, 19, Color{ 27, 27, 38, 255 });
+void CommitteePhase::Unload() {
+    if (texturesLoaded) {
+        if (texBg.id > 0) UnloadTexture(texBg);
+        if (texDesk.id > 0) UnloadTexture(texDesk);
+        if (texHero.id > 0) UnloadTexture(texHero);
+        if (texGrey.id > 0) UnloadTexture(texGrey);
+        if (texBlue.id > 0) UnloadTexture(texBlue);
+        if (texSlick.id > 0) UnloadTexture(texSlick);
+        texturesLoaded = false;
     }
-
-    Rectangle closeBtn = { SCREEN_WIDTH - 235.0f, SCREEN_HEIGHT - 105.0f, 155.0f, 42.0f };
-    DrawRectangleRec(closeBtn, Color{ 27, 27, 38, 255 });
-    DrawText("CERRAR [ESC]", static_cast<int>(closeBtn.x + 16), static_cast<int>(closeBtn.y + 12), 16, Color{ 242, 193, 78, 255 });
 }
